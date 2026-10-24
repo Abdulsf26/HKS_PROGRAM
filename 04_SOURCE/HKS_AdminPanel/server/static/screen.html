@@ -7,16 +7,29 @@
 <style>
 :root { --bg:#0a0d13; --card:#141926; --border:#232b3d; --text:#e8ebf2; --muted:#8b93a8; --primary:#4f8cff; --danger:#ef5466; }
 * { box-sizing: border-box; }
-html,body { margin:0; height:100%; background:var(--bg); color:var(--text); font:13.5px/1.5 "Segoe UI",system-ui,sans-serif; overflow:hidden; }
-#bar { display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--card); border-bottom:1px solid var(--border); }
+html,body { margin:0; width:100%; height:100%; background:var(--bg); color:var(--text); font:13.5px/1.5 "Segoe UI",system-ui,sans-serif; overflow:hidden; }
+body { display:flex; flex-direction:column; min-height:0; }
+#bar { flex:none; display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:8px 12px; background:var(--card); border-bottom:1px solid var(--border); }
 #bar .st { margin-left:auto; color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums; }
-.btn { background:var(--primary); color:#fff; border:none; border-radius:8px; padding:8px 13px; font-size:12.5px; font-weight:650; cursor:pointer; min-height:38px; }
+.btn { background:var(--primary); color:#fff; border:none; border-radius:8px; padding:8px 13px; font-size:12.5px; font-weight:650; cursor:pointer; min-height:42px; }
 .btn.ghost { background:#1a2030; border:1px solid var(--border); }
 .btn.danger { background:var(--danger); }
-#stage { position:absolute; inset:49px 0 0 0; display:grid; place-items:center; background:#05070b; }
-#cv { max-width:100%; max-height:100%; background:#000; border:1px solid var(--border); border-radius:6px; touch-action:none; outline:none; }
-#msg { position:absolute; inset:0; display:grid; place-items:center; color:var(--muted); text-align:center; padding:20px; }
-#inputOn { width:auto; }
+#stage { position:relative; flex:1 1 auto; min-height:0; min-width:0; display:grid; place-items:center; background:#05070b; overflow:hidden; }
+#cv { display:block; max-width:100%; max-height:100%; background:#000; border:1px solid var(--border); touch-action:none; outline:none; }
+#msg { position:absolute; inset:0; display:grid; place-items:center; color:var(--muted); text-align:center; padding:20px; pointer-events:none; }
+#error { position:absolute; z-index:2; left:12px; right:12px; bottom:12px; margin:0 auto; max-width:720px; padding:10px 14px; color:#fff; background:#8d2434; border:1px solid #f87171; border-radius:8px; box-shadow:0 5px 20px #0008; pointer-events:none; }
+#error[hidden] { display:none; }
+#inputOn { width:18px; height:18px; accent-color:var(--primary); }
+label:has(#inputOn) { min-height:42px; padding:5px 9px; border:1px solid var(--border); border-radius:8px; }
+@media (max-width:600px) {
+  #bar { gap:6px; padding:7px; }
+  #bar > b { flex:1 0 34%; }
+  #bar .btn, #mon { flex:1 1 calc(33% - 6px); min-width:0; padding:7px 8px; font-size:12px; }
+  #bar label:has(#inputOn) { flex:1 1 calc(50% - 6px); font-size:12px !important; }
+  #bar .st { flex:1 1 calc(50% - 6px); min-width:0; margin-left:0; text-align:right; }
+  #stage { padding:2px; }
+  #cv { border:0; }
+}
 </style>
 </head>
 <body>
@@ -28,14 +41,15 @@ html,body { margin:0; height:100%; background:var(--bg); color:var(--text); font
     <option value="0">Main monitor</option><option value="1">Monitor 2</option>
   </select>
   <label style="display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12.5px">
-    <input type="checkbox" id="inputOn" checked> Mouse+Keys ON
+    <input type="checkbox" id="inputOn" aria-label="Enable remote mouse and keyboard" aria-describedby="st"> Mouse+Keys
   </label>
   <span class="st" id="st">connecting…</span>
-  <button class="btn danger" id="bClose">✕ Disconnect</button>
+  <button class="btn danger" id="bClose">✕ Close</button>
 </div>
 <div id="stage">
-  <canvas id="cv" tabindex="0"></canvas>
-  <div id="msg">Connecting to your laptop's live channel…<br>If this hangs, open it from the Dashboard (backup mode works there).</div>
+  <canvas id="cv" tabindex="0" aria-label="Live remote screen"></canvas>
+  <div id="msg" role="status" aria-live="polite">Connecting to your laptop's live channel…</div>
+  <div id="error" role="alert" aria-live="assertive" hidden></div>
 </div>
 <script>
 const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
@@ -44,8 +58,19 @@ const qs = new URLSearchParams(location.search);
 const MACHINE = qs.get("m") || "";
 const proto = location.protocol === "https:" ? "wss://" : "ws://";
 let ws = null, wsDead = false, scr = { w: 1280, h: 720 }, tries = 0;
-let inputOn = () => document.getElementById("inputOn").checked;
-let restTimer = null, seq = 0;
+const inputToggle = document.getElementById("inputOn");
+inputToggle.checked = false; // Do not trust a browser-restored checkbox before the agent confirms state.
+let inputOn = () => inputToggle.checked;
+let restTimer = null, snapshotBusy = false, bootstrapReady = false, pointerHeld = new Set(), heldKeys = new Map(), pointerId = null;
+const errorBox = document.getElementById("error");
+function showError(message) {
+  errorBox.textContent = String(message || "Request failed").slice(0, 500);
+  errorBox.hidden = false;
+  clearTimeout(showError.timer);
+  showError.timer = setTimeout(() => { errorBox.hidden = true; }, 7000);
+}
+function clearError() { errorBox.hidden = true; }
+function liveText() { return (wsDead ? "backup mode" : "LIVE") + (inputOn() ? " · input ON" : " · view only"); }
 /* sandboxed-preview guard: document.cookie THROWS in an opaque-origin iframe */
 const TOKEN = (() => { try { return qs.get("token") || ""; } catch (e) { return ""; } })();
 const csrf = (() => { try { return (document.cookie.match(/(?:^|;\s*)hks_session=[^;]*/) || [""])[0]; } catch (e) { return ""; } })();
@@ -53,17 +78,16 @@ const csrf = (() => { try { return (document.cookie.match(/(?:^|;\s*)hks_session
 /* EngineMonitor (AnywhereInput port): poll the real input engine state and
    show it next to LIVE - healthy/degraded/offline + error count. */
 setInterval(async () => {
-  if (wsDead || !inputOn()) return;
+  if (!bootstrapReady) return;
   try {
     const r = await api("input.status", {});
-    const d = r.result ? (r.result.data || {}) : (r.data || r);
+    const d = r.result?.data || r.data || r.result || r;
     if (!d.engine) return;
-    const base = st.textContent.replace(/ \u00b7 ENG.*$/, "");
-    st.textContent = base + " \u00b7 ENG " + d.engine +
-      (d.errors ? " (" + d.errors + " err)" : "");
+    if (!inputToggle.disabled && inputToggle.checked !== !!d.input_active) inputToggle.checked = !!d.input_active;
+    st.textContent = liveText() + " · engine " + d.engine;
     st.style.color = d.engine === "healthy" ? "" : (d.engine === "degraded" ? "#fbbf24" : "#f87171");
-  } catch (e) {}
-}, 4000);
+  } catch (e) { st.textContent = "input status unavailable"; showError(e.message); }
+}, 8000);
 
 function api(action, params) {
   const h = { "Content-Type": "application/json", "X-HKS-CSRF": (window.__hksCsrf || "") };
@@ -71,16 +95,27 @@ function api(action, params) {
   return fetch("/api/cmd", { method: "POST", credentials: "same-origin",
     headers: h,
     body: JSON.stringify({ machine: MACHINE, action, params }) })
-    .then(r => r.json());
+    .then(async r => {
+      let j;
+      try { j = await r.json(); } catch { throw new Error("Server returned an unreadable response (HTTP " + r.status + ")"); }
+      if (!r.ok || j.ok === false || j.result?.ok === false) throw new Error(j.error || j.result?.error || ("Request failed (HTTP " + r.status + ")"));
+      return j;
+    });
 }
 /* resolve our CSRF from /api/me so REST fallback input works too
    (token fallback for cookie-blocked sandboxed previews) */
 (() => {
   const h = TOKEN ? { "Authorization": "Bearer " + TOKEN } : {};
-  fetch("/api/me", { credentials: "same-origin", headers: h }).then(r => r.json()).then(j => {
+  fetch("/api/me", { credentials: "same-origin", headers: h }).then(async r => { if (!r.ok) throw new Error("Sign-in check failed (HTTP " + r.status + ")"); return r.json(); }).then(async j => {
     window.__hksCsrf = (j.user && j.user.csrf) || "";
-    if (!j.user) { document.getElementById("msg").innerHTML = "Not logged in — <a href='/'>sign in</a>, then reopen this tab."; }
-  }).catch(() => {});
+    if (!j.user) { document.getElementById("msg").textContent = "Not signed in. Sign in to HKS, then reopen this tab."; showError("Your HKS session has expired. Sign in again and reopen Remote Screen."); return; }
+    bootstrapReady = true;
+    const s = await api("input.status", {}), d = s.result?.data || s.data || s.result || s;
+    const box = inputToggle;
+    box.checked = !!d.input_active;
+    st.textContent = liveText() + (d.engine ? " · engine " + d.engine : "");
+    if (!d.available && d.desktop_error) showError(d.desktop_error);
+  }).catch(e => { showError(e.message); st.textContent = "session or input status unavailable"; });
 })();
 
 function draw(buf) {
@@ -91,7 +126,9 @@ function draw(buf) {
     ctx.drawImage(img, 0, 0);
     scr = { w: img.naturalWidth, h: img.naturalHeight };
     document.getElementById("msg").style.display = "none";
+    URL.revokeObjectURL(img.src);
   };
+  img.onerror = () => URL.revokeObjectURL(img.src);
   img.src = URL.createObjectURL(blob);
 }
 function restLoop() {                       // backup: pull frames over REST
@@ -99,12 +136,14 @@ function restLoop() {                       // backup: pull frames over REST
   const tick = () => {
     restTimer = null;
     if (!wsDead) return;
+    if (snapshotBusy) { restTimer = setTimeout(tick, 900); return; }
+    snapshotBusy = true;
     api("screen.snapshot", { monitor: +mon.value, max_width: 1100 }).then(j => {
-      st.textContent = "backup mode (REST) — slower";
-      const b = j.result && j.result.data && j.result.data.b64;
+      st.textContent = liveText() + " (REST · slower)";
+      const b = j.result?.data?.b64 || j.data?.b64 || j.result?.b64;
       if (b) fetch("data:image/jpeg;base64," + b).then(r => r.blob())
         .then(bl => new Response(bl).arrayBuffer()).then(draw);
-    }).catch(() => {});
+    }).catch(e => { st.textContent = "backup mode unavailable"; showError("Live screen backup failed: " + e.message); }).finally(() => { snapshotBusy = false; });
     restTimer = setTimeout(tick, 900);
   };
   tick();
@@ -113,20 +152,20 @@ function connect() {
   st.textContent = "live channel connecting…";
   ws = new WebSocket(proto + location.host + "/ws/dash");
   ws.binaryType = "arraybuffer";
-  ws.onopen = () => { ws.send(JSON.stringify({ machine: MACHINE, token: TOKEN || undefined })); st.textContent = "LIVE"; tries = 0; };
+  ws.onopen = () => { wsDead = false; if (restTimer) { clearTimeout(restTimer); restTimer = null; } ws.send(JSON.stringify({ machine: MACHINE, token: TOKEN || undefined })); st.textContent = liveText(); tries = 0; };
   ws.onmessage = (ev) => {
     if (ev.data instanceof ArrayBuffer) {
       const u = new Uint8Array(ev.data);
-      if (u[0] === 1) { draw(ev.data.slice(1)); st.textContent = "LIVE"; }
+      if (u[0] === 1) { draw(ev.data.slice(1)); st.textContent = liveText(); }
       return;
     }
-    try { const m = JSON.parse(ev.data); if (m.type === "hello_dash") st.textContent = "LIVE"; } catch {}
+    try { const m = JSON.parse(ev.data); if (m.type === "hello_dash") st.textContent = liveText(); } catch {}
   };
   ws.onclose = (ev) => {
-    wsDead = ev.code === 4401;
-    if (wsDead) { st.textContent = "live channel auth blocked — using backup"; restLoop(); return; }
-    st.textContent = "reconnecting…";
-    setTimeout(connect, Math.min(12000, 2000 * ++tries));
+    wsDead = true;
+    if (ev.code === 4401) { st.textContent = "sign-in required"; showError("Live channel authentication expired. Sign in again to reconnect."); }
+    else { st.textContent = "reconnecting · backup mode"; restLoop(); }
+    if (ev.code !== 4401) setTimeout(connect, Math.min(12000, 1500 * Math.max(1, ++tries)));
   };
   ws.onerror = () => { try { ws.close(); } catch {} };
 }
@@ -147,9 +186,13 @@ function toNat(cx, cy) {
   return { x: +x.toFixed(5), y: +y.toFixed(5) };
 }
 function send(ev) {
-  if (!inputOn()) return;
-  if (ws && ws.readyState === 1) { ws.send(JSON.stringify({ type: "input", ev })); return; }
-  api("input.apply", ev).catch(() => {});
+  if (!inputOn() || !bootstrapReady) return Promise.resolve();
+  // Keep high-frequency movement on the low-latency WS path. Discrete actions
+  // use acknowledged REST commands so agent-side failures are visible.
+  if (ev.t === "mm" && ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({ type: "input", ev })); return Promise.resolve();
+  }
+  return api("input.apply", ev).then(j => { clearError(); return j; }).catch(e => { showError("Remote input failed: " + e.message); throw e; });
 }
 /* mouse */
 let lastMove = 0;
@@ -157,17 +200,17 @@ cv.addEventListener("mousemove", e => {
   const now = Date.now(); if (now - lastMove < 33) return; lastMove = now;
   send({ t: "mm", ...toNat(e.clientX, e.clientY) });
 });
-cv.addEventListener("mousedown", e => { e.preventDefault(); cv.focus(); send({ t: "md", ...toNat(e.clientX, e.clientY), btn: e.button }); });
-cv.addEventListener("mouseup", e => send({ t: "mu", ...toNat(e.clientX, e.clientY), btn: e.button }));
+cv.addEventListener("mousedown", e => { e.preventDefault(); cv.focus(); pointerHeld.add(e.button); send({ t: "md", ...toNat(e.clientX, e.clientY), btn: e.button }).catch(() => pointerHeld.delete(e.button)); });
+cv.addEventListener("mouseup", e => { pointerHeld.delete(e.button); send({ t: "mu", ...toNat(e.clientX, e.clientY), btn: e.button }).catch(() => {}); });
 cv.addEventListener("wheel", e => { e.preventDefault(); send({ t: "mw", dx: e.deltaX, dy: e.deltaY }); }, { passive: false });
 cv.addEventListener("contextmenu", e => e.preventDefault());
-cv.addEventListener("keydown", e => { e.preventDefault(); send({ t: "kd", key: e.key, code: e.code, ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey }); });
-cv.addEventListener("keyup", e => { e.preventDefault(); send({ t: "ku", key: e.key, code: e.code }); });
+cv.addEventListener("keydown", e => { e.preventDefault(); if (heldKeys.has(e.code)) return; heldKeys.set(e.code, { key:e.key, code:e.code }); send({ t: "kd", key: e.key, code: e.code, ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey }).catch(() => {}); });
+cv.addEventListener("keyup", e => { e.preventDefault(); heldKeys.delete(e.code); send({ t: "ku", key: e.key, code: e.code }).catch(() => {}); });
 /* touch — VNC client behavior: tap = click, drag = press+move, long-press = right click */
-let tS = null, moved = false, tT = null, touchDown = false;
+let tS = null, moved = false, tT = null, touchDown = false, longPressed = false;
 cv.addEventListener("touchstart", e => {
-  e.preventDefault(); const t = e.touches[0]; tS = toNat(t.clientX, t.clientY); moved = false;
-  tT = setTimeout(() => { if (tS && !moved) send({ t: "md", ...tS, btn: 2 }); }, 600);
+  e.preventDefault(); const t = e.changedTouches[0]; tS = toNat(t.clientX, t.clientY); moved = false; longPressed = false; touchDown = false;
+  tT = setTimeout(() => { if (tS && !moved) { longPressed = true; touchDown = true; pointerHeld.add(2); send({ t: "md", ...tS, btn: 2 }).catch(() => { touchDown = false; pointerHeld.delete(2); }); } }, 600);
 }, { passive: false });
 cv.addEventListener("touchmove", e => {
   e.preventDefault(); if (!tS) return;
@@ -180,15 +223,40 @@ cv.addEventListener("touchmove", e => {
 }, { passive: false });
 cv.addEventListener("touchend", e => {
   clearTimeout(tT); if (!tS) return; e.preventDefault();
-  if (touchDown) { send({ t: "mu", ...toNat(e.changedTouches[0].clientX, e.changedTouches[0].clientY), btn: 0 }); touchDown = false; }
-  else if (!moved) { send({ t: "md", ...tS, btn: 0 }); send({ t: "mu", ...tS, btn: 0 }); try { navigator.vibrate && navigator.vibrate(10); } catch (er) {} }
+  if (touchDown && longPressed) { const p = toNat(e.changedTouches[0].clientX, e.changedTouches[0].clientY); send({ t: "mu", ...p, btn: 2 }).catch(() => {}); pointerHeld.delete(2); touchDown = false; }
+  else if (touchDown) { send({ t: "mu", ...toNat(e.changedTouches[0].clientX, e.changedTouches[0].clientY), btn: 0 }).catch(() => {}); pointerHeld.delete(0); touchDown = false; }
+  else if (!moved) { send({ t: "md", ...tS, btn: 0 }).then(() => send({ t: "mu", ...tS, btn: 0 })).catch(() => {}); try { navigator.vibrate && navigator.vibrate(10); } catch (er) {} }
   tS = null;
 }, { passive: false });
+cv.addEventListener("touchcancel", () => { clearTimeout(tT); releaseHeld(); tS = null; touchDown = false; });
+function releaseHeld() {
+  for (const btn of pointerHeld) send({ t: "mu", ...toNat(cv.getBoundingClientRect().left + cv.clientWidth/2, cv.getBoundingClientRect().top + cv.clientHeight/2), btn }).catch(() => {});
+  pointerHeld.clear();
+  for (const key of heldKeys.values()) send({ t: "ku", key:key.key, code:key.code }).catch(() => {});
+  heldKeys.clear();
+}
+window.addEventListener("blur", releaseHeld);
+document.addEventListener("visibilitychange", () => { if (document.hidden) releaseHeld(); });
+
+inputToggle.addEventListener("change", async e => {
+  const box = e.currentTarget, requested = box.checked;
+  box.disabled = true;
+  try {
+    if (!bootstrapReady) throw new Error("Session is still being verified. Try again in a moment.");
+    const j = await api("input.enable", { on: requested });
+    const d = j.result?.data || j.data || j.result || j;
+    box.checked = !!(d.enabled ?? d.input_active ?? requested);
+    if (!box.checked) releaseHeld();
+    st.textContent = liveText();
+    clearError();
+  } catch (err) { box.checked = !requested; showError("Could not change remote input: " + err.message); }
+  finally { box.disabled = false; }
+});
 
 /* toolbar */
-document.getElementById("bFull").onclick = () => {
-  if (document.fullscreenElement) document.exitFullscreen();
-  else document.documentElement.requestFullscreen().catch(() => {});
+document.getElementById("bFull").onclick = async () => {
+  try { if (document.fullscreenElement) await document.exitFullscreen(); else await document.documentElement.requestFullscreen(); }
+  catch (e) { showError("Fullscreen could not start: " + e.message); }
 };
 document.getElementById("bClose").onclick = () => { wsDead = true; try { ws && ws.close(); } catch {} window.close(); };
 document.getElementById("bShot").onclick = () => {
@@ -198,13 +266,13 @@ document.getElementById("bShot").onclick = () => {
   a.download = "HKS_mirror_" + new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19) + ".png";
   a.click();
 };
-mon.onchange = () => { api("screen.control", { on: true, monitor: +mon.value, fps: 8, quality: 55, max_width: 1400 }).catch(() => {}); };
+mon.onchange = () => { api("screen.control", { on: true, monitor: +mon.value, fps: 8, quality: 55, max_width: 1400 }).then(clearError).catch(e => showError("Could not switch monitor: " + e.message)); };
 /* round 65 (audit7 #31): the fixed 600 ms timer raced the /api/me round trip
    and sent an EMPTY CSRF header (403, black canvas on slow links). Wait for
    the bootstrap, with a 4 s escape hatch if /api/me never answers. */
 (function firstStart() {
   if (window.__hksCsrf || (firstStart.w = (firstStart.w || 0) + 150) > 4000) {
-    api("screen.control", { on: true, monitor: 0, fps: 8, quality: 55, max_width: 1400 }).catch(() => {});
+    api("screen.control", { on: true, monitor: 0, fps: 8, quality: 55, max_width: 1400 }).catch(e => showError("Could not start screen stream: " + e.message));
     return;
   }
   setTimeout(firstStart, 150);

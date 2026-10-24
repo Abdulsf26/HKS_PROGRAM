@@ -122,6 +122,11 @@ def test_ui_and_field_round():
     assert "power.lock_screen" in js and "secure sequence" in js
     assert "touchstart" in js and "touchmove" in js
     assert "toNat" in scr and "touchstart" in scr and "requestFullscreen" in scr
+    assert 'id="inputOn" checked' not in scr and 'api("input.enable"' in scr
+    assert "inputToggle.checked = false" in scr and "input_active" in scr
+    assert "function liveText()" in scr and "if (!bootstrapReady) return" in scr
+    assert 'role="alert"' in scr and "releaseHeld" in scr and "touchcancel" in scr
+    assert "flex-wrap:wrap" in scr and "wsDead = true" in scr
     assert "screen.html" in js
     assert "isSecureContext" in js
     for tok in ("--bg", "--primary", "--success", "--danger", "--sidebar"):
