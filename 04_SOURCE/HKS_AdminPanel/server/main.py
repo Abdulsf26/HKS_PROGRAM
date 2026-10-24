@@ -2059,7 +2059,7 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 # Bump on EVERY rebuild — the login page and CHECK_STATUS display it so a
 # stale install is instantly visible in the field ("still error" usually
 # meant the old build was still running).
-HKS_BUILD_VERSION = "7.2.99"
+HKS_BUILD_VERSION = "7.2.101"
 
 
 @app.get("/api/version")

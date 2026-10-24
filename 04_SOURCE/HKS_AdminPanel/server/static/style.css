@@ -344,6 +344,24 @@ body.side-collapsed .brand { justify-content: center; padding-left: 0; padding-r
 .card h3 { font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
   color: var(--muted); margin-bottom: var(--s2); }
 .card .big { font-size: var(--fs-2xl); font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.machine-picker { min-width:150px; max-width:220px; height:38px; padding:0 32px 0 10px; border:2px solid var(--ink);
+  border-radius:var(--r-sm); background:var(--card); color:var(--text); font:inherit; font-size:var(--fs-xs); font-weight:800; }
+.device-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(360px,100%),1fr)); gap:16px; min-width:0; }
+.device-card { min-width:0; padding:18px; border:2px solid var(--ink); border-radius:var(--r); background:var(--card); box-shadow:3px 3px 0 var(--ink); }
+.device-card-head,.device-name-wrap,.device-state-row,.device-card-actions { display:flex; align-items:center; justify-content:space-between; gap:12px; min-width:0; }
+.device-name-wrap { justify-content:flex-start; }
+.device-icon { display:grid; place-items:center; flex:0 0 42px; width:42px; height:42px; border:2px solid var(--ink); background:var(--surface-hi); font-size:22px; }
+.device-title { min-width:0; }
+.device-title h3 { margin:0 0 4px; font-size:var(--fs-base); overflow-wrap:anywhere; }
+.device-id { display:block; max-width:230px; color:var(--muted); font:var(--fs-xs) ui-monospace,monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.device-state-row { justify-content:flex-start; flex-wrap:wrap; margin:14px 0; }
+.device-state { padding:5px 8px; border:1px solid var(--border); border-radius:var(--r-sm); color:var(--muted); font-size:var(--fs-xs); }
+.device-state.online { border-color:var(--success); color:var(--success); background:var(--ok-bg); }
+.device-facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:14px 0; }
+.device-facts > div { display:flex; flex-direction:column; gap:4px; min-width:0; padding:9px; border:1px solid var(--border-soft); border-radius:var(--r-sm); }
+.device-facts span { color:var(--muted); font-size:var(--fs-xs); }
+.device-facts b { min-width:0; overflow-wrap:anywhere; font-size:var(--fs-xs); }
+.device-card-actions .btn { width:100%; min-height:42px; }
 .banner {
   background: var(--warn-bg); border: 1px solid rgba(232,177,63,.35); color: var(--warning);
   border-radius: var(--r); padding: 10px 14px; margin-bottom: var(--s3); font-size: var(--fs-sm);
@@ -1586,6 +1604,8 @@ html[data-theme="dark"] .process-card,html[data-theme="dark"] .usb-card,html[dat
   .addon-card { padding:12px; }
   .addon-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
   .addon-actions > .btn { min-width:0; justify-content:center; white-space:normal; }
+  .device-grid { grid-template-columns:minmax(0,1fr); }
+  .device-card { padding:14px; }
 }
 @media (max-width:380px) {
   #top { grid-template-columns:36px minmax(0,1fr) 36px 36px; gap:6px; padding-inline:7px; }

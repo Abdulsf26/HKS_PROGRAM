@@ -48,13 +48,14 @@ ROOT_FILES = [
     ("02_DOCS/README_START_HERE.txt", "README_START_HERE.txt"),
     ("02_DOCS/SETUP_GUIDE.md", "SETUP_GUIDE.md"),
     ("02_DOCS/CREDITS.md", "CREDITS.md"),
+    ("02_DOCS/HKS_NEXT_PHASE_PLAN.md", "HKS_NEXT_PHASE_PLAN.md"),
     ("04_SOURCE/README.txt", "DEVELOPER_NOTES.txt"),
     ("04_SOURCE/first_run.py", "first_run.py"),
 ]
 EXCLUDE = {"HKS_AdminPanel/server/static/HKS_PROGRAM.zip", "HKS_AdminPanel/INSTALL_HKS.bat",
            "HKS_AdminPanel/CHECK_STATUS.bat", "HKS_AdminPanel/.env",
            "HKS_AdminPanel/certs/server.pem", "HKS_AdminPanel/certs/key.pem"}
-EXPECTED_FILES = 158  # Public source export excludes private development history.
+EXPECTED_FILES = 162  # Includes the focused boot-task repair utility.
 
 
 def add_folder(z, top, arc_prefix):
@@ -63,8 +64,6 @@ def add_folder(z, top, arc_prefix):
         dirnames[:] = [d for d in dirnames if d not in ("__pycache__", "data", ".pytest_cache")
                        and not (d.startswith("_") and d.endswith("_tmp"))]  # round 62: test litter
         for f in sorted(filenames):
-            if f in {"HKS_BUILD_SPECIFICATION.md", "LINKED_PROJECTS.md", "RESEARCH_NOTES.md"}:
-                continue  # private field/development history is not part of the public source package
             full = os.path.join(dirpath, f)
             rel = os.path.relpath(full, top)
             arc = arc_prefix + "/" + rel.replace(os.sep, "/")
@@ -488,6 +487,14 @@ def gates(n):
             zt.read("HKS_AdminPanel/server/static/style.css").decode()
             and "CPU/RAM icons must be distinct, equally sized SVGs" in
             zt.read("HKS_AdminPanel/tests/ui_smoke.js").decode()),
+        ("MeshCentral-inspired native device inventory and selector",
+            'id: "devices"' in zt.read("HKS_AdminPanel/server/static/app.js").decode()
+            and 'id="tMachine"' in zt.read("HKS_AdminPanel/server/static/index.html").decode()
+            and "device cards must allow switching the managed machine" in
+            zt.read("HKS_AdminPanel/tests/ui_smoke.js").decode()),
+        ("old WebSocket close cannot overwrite selected device status",
+            "if (STATE.ws !== ws) return;" in
+            zt.read("HKS_AdminPanel/server/static/app.js").decode()),
         ("r56: localhost status ports are exclusive",
             "ThreadingHTTPServer.allow_reuse_address = False" in
             zt.read("HKS_Client/agent/local_panel.py").decode()),
@@ -562,7 +569,6 @@ def rebuild_bat(size, sha, nparts):
 
 
 def parts():
-    os.makedirs(PARTS_DIR, exist_ok=True)
     data = open(OUT, "rb").read()
     size = len(data)
     sha = hashlib.sha256(data).hexdigest()

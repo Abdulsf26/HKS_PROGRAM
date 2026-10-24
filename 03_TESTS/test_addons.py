@@ -57,8 +57,8 @@ for n in NEW:
 
 # 4. netdata uses the officially documented stable URL
 nd = open(os.path.join(ADD, "ADDON_NETDATA.bat"), encoding="ascii").read()
-assert "releases/latest/download/netdata-x64.msi" in nd
-assert "msiexec /i netdata-x64.msi /qn" in nd
+assert "releases/latest/download/netdata-latest-x64.msi" in nd
+assert "msiexec /i \"%CD%\\netdata.msi\" /qn" in nd
 
 # 5. uptime kuma honestly guards on Node
 uk = open(os.path.join(ADD, "ADDON_UPTIMEKUMA.bat"), encoding="ascii").read()
@@ -88,5 +88,17 @@ by = {x["name"]: x for x in out["addons"]}
 assert len(by) == 37
 assert by["RustDesk"]["up"] is None and by["RustDesk"]["url"] == ""
 assert isinstance(by["Syncthing"]["up"], bool)
+
+# MeshCentral's main listener is HTTPS; prevent HTTP links, destructive config
+# overwrite, and duplicate starts in the installer workflow.
+mesh = next(a for a in REG if a["name"] == "MeshCentral")
+assert mesh["port"] == 8490 and mesh["scheme"] == "https"
+mesh_bat = open(os.path.join(ADD, "ADDON_MESHCENTRAL.bat"), encoding="ascii").read()
+assert "https://localhost:8490" in mesh_bat
+assert 'if not exist meshcentral-data\\config.json' in mesh_bat
+assert "profile=private" in mesh_bat
+assert "netstat -ano -p tcp" in mesh_bat
+ui = open(os.path.join(ROOT, "HKS_AdminPanel", "server", "static", "app.js"), encoding="utf-8").read()
+assert '"MeshCentral", "8490"' in ui
 
 print("ADDONS TESTS: 37 registered / 25 new bats verified / menu + autostart + status OK")

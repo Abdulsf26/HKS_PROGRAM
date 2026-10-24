@@ -299,6 +299,40 @@ try {
   if (cardState().split("|")[0] === "none" || !cardState().includes("DESKTOP AGENT OFFLINE")) { bad++; console.log("FAIL: agent card must SHOW the desktop-offline hint"); }
   MACHINES = { ok: true, machines: [], default_machine: null, agent_token_hint: "x…" };
 
+  // Native multi-device management: inventory, topbar picker, persistence,
+  // and card-based selection must all use the HKS machine registry.
+  MACHINES = { ok: true, machines: [
+    { machine_id: "m1", name: "Laptop One", version: "1.0", ip: "192.0.2.1", last_seen: Date.now()/1000, live_svc: true, live_session: true, telemetry: { cpu: 21, ram: 44 } },
+    { machine_id: "m2", name: "Laptop Two", version: "1.1", ip: "192.0.2.2", last_seen: Date.now()/1000-3600, live_svc: true, live_session: false, telemetry: { cpu: 33, ram: 55 } }
+  ], default_machine: "m1" };
+  await w.HKS_DEBUG.refreshPills();
+  const picker = w.document.getElementById("tMachine");
+  if (!picker || picker.options.length !== 2 || picker.value !== "m1") {
+    bad++; console.log("FAIL: topbar device picker must populate and select the server default");
+  }
+  const devicesNav = [...navItems].find((n) => n.dataset.id === "devices");
+  if (!devicesNav) { bad++; console.log("FAIL: Devices navigation item missing"); }
+  else {
+    devicesNav.dispatchEvent(new w.Event("click", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 25));
+    const deviceView = w.document.querySelector(".view.on");
+    if (deviceView?.querySelectorAll(".device-card").length !== 2) {
+      bad++; console.log("FAIL: Devices page must render a card for each enrolled machine");
+    }
+    const useTwo = [...(deviceView?.querySelectorAll(".device-card button") || [])].find((b) => b.textContent.includes("Manage this device"));
+    if (!useTwo) { bad++; console.log("FAIL: device cards must allow switching the managed machine"); }
+    else {
+      useTwo.click();
+      if (w.localStorage.getItem("hks_selected_machine") !== "m2") {
+        bad++; console.log("FAIL: selected machine must persist across browser reloads");
+      }
+      if (picker.value !== "m2") { bad++; console.log("FAIL: topbar picker must follow card-based device selection"); }
+      if (w.document.getElementById("tSes")?.textContent !== "desktop offline") {
+        bad++; console.log("FAIL: device switch must immediately refresh the selected desktop-agent status");
+      }
+    }
+  }
+
   // login screen sanity: logout then check login form exists
   if (errors.length) { bad++; console.log("window errors:", errors); }
   if (bad) { console.log(`\nUI SMOKE: ${bad} problem(s)`); process.exit(1); }

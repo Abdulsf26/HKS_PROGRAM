@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#0b0e14">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="/static/style.css?v=99">
+<link rel="stylesheet" href="/static/style.css?v=101">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%232563eb'/><text x='16' y='22' font-size='16' text-anchor='middle' fill='%23fff' font-weight='bold'>H</text></svg>">
 <script>
 /* theme before first paint. round 62 (audit5 #1): ONLY the theme line stays
@@ -108,7 +108,7 @@ try{
     <button class="btn ghost icon" id="btnBell" title="Errors & alerts">🔔<span class="badge" id="errBadge" style="display:none">0</span></button>
     <span class="pill hide-m"><span class="dot" id="dSvc"></span><span id="tSvc">service</span></span>
     <span class="pill hide-m"><span class="dot" id="dSes"></span><span id="tSes">desktop</span></span>
-    <span class="pill" id="tMachine">no machine</span>
+    <select class="machine-picker" id="tMachine" aria-label="Select managed device" title="Select which laptop HKS controls"><option value="">No managed device</option></select>
     <span class="pill hide-m" id="wsPill" title="browser ⇄ laptop live channel">● live…</span>
     <span style="flex:1"></span>
     <span class="pill hide-m" id="tClock">--:--</span>
@@ -243,6 +243,6 @@ try{
   if(fg) fg.addEventListener("click",function(ev){ ev.preventDefault(); hksResetModal(); });
 })();
 </script>
-<script src="/static/app.js?v=99"></script>
+<script src="/static/app.js?v=101"></script>
 </body>
 </html>

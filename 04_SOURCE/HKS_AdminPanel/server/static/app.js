@@ -379,6 +379,10 @@ function connectWs() {
     else if (m.type === "agent_error") toast("⚠ Agent error [" + m.module + "]: " + m.message, true);
   };
   ws.onclose = (ev) => {
+    // connectWs closes the old machine's socket when a device is selected.
+    // Ignore its late close event so it cannot change the new device status
+    // or schedule a duplicate reconnect against the new selection.
+    if (STATE.ws !== ws) return;
     STATE.wsReady = false; setPill("off");
     if (ev && ev.code === 4401) {
       // server says unauthenticated - confirm before logging the UI out
@@ -390,7 +394,7 @@ function connectWs() {
     const wait = Math.min(15000, 2500 * STATE.wsTries);
     if (STATE.user) setTimeout(() => { if (STATE.user) connectWs(); }, wait);
   };
-  ws.onerror = () => setPill("off");
+  ws.onerror = () => { if (STATE.ws === ws) setPill("off"); };
 }
 // dashboard stays LIVE even when the websocket is down (5s REST poll).
 // 7.2.54 fix: /api/telemetry returns {points:[...]} - the old code read
@@ -467,23 +471,125 @@ function stopTalk() {
   STATE.talkNode = STATE.talkStream = STATE.talkCtx = null;
 }
 
+function renderDevices(v) {
+  v.append(el("p", { class: "vsub" }, "Every HKS agent registered to this server. Select a device to direct controls, files, and live telemetry to it."));
+  const summary = el("div", { class: "device-summary muted" }, "Loading managed devices…");
+  const grid = el("div", { class: "device-grid" });
+  v.append(panel("Managed devices", summary,
+    el("div", { class: "row", style: "margin:12px 0" },
+      el("button", { class: "btn ghost sm", onclick: async (e) => {
+        busy(e.target, true);
+        try { await refreshPills(); paint(); } catch (err) { toast("Device refresh failed: " + err.message, true); }
+        finally { busy(e.target, false); }
+      } }, "⟳ Refresh")), grid));
+
+  const ago = (value) => {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) return "Never seen";
+    const seconds = Math.max(0, Math.floor(Date.now() / 1000 - n));
+    if (seconds < 60) return "Just now";
+    if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)} hr ago`;
+    return `${Math.floor(seconds / 86400)} days ago`;
+  };
+  function paint() {
+    const devices = Array.isArray(STATE.machines) ? STATE.machines : [];
+    grid.replaceChildren();
+    summary.textContent = devices.length
+      ? `${devices.length} registered device${devices.length === 1 ? "" : "s"} · selected device controls all machine actions`
+      : "No HKS agent has registered yet. Start the HKS service and desktop agent on a laptop, then refresh.";
+    if (!devices.length) {
+      grid.append(hksErrState("No managed devices", "Check the HKS agent service and network connection on the laptop, then refresh.", async () => { await refreshPills(); paint(); }));
+      return;
+    }
+    for (const m of devices) {
+      const selected = m.machine_id === STATE.machine;
+      const t = m.telemetry || {};
+      const svc = !!m.live_svc, session = !!m.live_session;
+      const card = el("article", { class: "device-card" },
+        el("div", { class: "device-card-head" },
+          el("div", { class: "device-name-wrap" }, el("span", { class: "device-icon", "aria-hidden": "true" }, "▣"),
+            el("div", { class: "device-title" }, el("h3", null, m.name || "Windows device"),
+              el("span", { class: "device-id", title: m.machine_id || "" }, String(m.machine_id || "unknown")))),
+          el("span", { class: "tag " + ((svc || session) ? "ok" : "bad") }, (svc || session) ? "ONLINE" : "OFFLINE")),
+        el("div", { class: "device-state-row" },
+          el("span", { class: "device-state " + (svc ? "online" : "") }, `Service ${svc ? "online" : "offline"}`),
+          el("span", { class: "device-state " + (session ? "online" : "") }, `Desktop ${session ? "online" : "offline"}`)),
+        el("div", { class: "device-facts" },
+          el("div", null, el("span", null, "Address"), el("b", null, m.ip || t.ip || "Not reported")),
+          el("div", null, el("span", null, "Agent version"), el("b", null, m.version || "Unknown")),
+          el("div", null, el("span", null, "Last check-in"), el("b", null, (svc || session) ? "Connected now" : ago(m.last_seen))),
+          t.cpu != null ? el("div", null, el("span", null, "CPU"), el("b", null, `${Math.round(Number(t.cpu))}%`)) : null,
+          t.ram != null ? el("div", null, el("span", null, "Memory"), el("b", null, `${Math.round(Number(t.ram))}%`)) : null,
+          t.ssid ? el("div", null, el("span", null, "Wi-Fi"), el("b", null, String(t.ssid))) : null),
+        el("div", { class: "device-card-actions" },
+          el("button", { class: "btn " + (selected ? "ghost" : ""), disabled: selected,
+            "aria-pressed": String(selected), onclick: () => selectMachine(m.machine_id) }, selected ? "✓ Managing this device" : "Manage this device")));
+      grid.append(card);
+    }
+  }
+  paint();
+  v.refreshDevices = async () => { try { await refreshPills(); paint(); } catch (e) { summary.textContent = "Could not refresh devices: " + e.message; } };
+  // The five-second status poll updates STATE.machines; refresh this inventory without rebuilding the screen.
+  every(5000, paint);
+}
+
 /* ---------------- top bar ---------------- */
 async function refreshPills() {
   try {
     const j = await api("/api/machines");
-    STATE.machines = j.machines;
-    if (!STATE.machine) STATE.machine = j.default_machine || (j.machines[0] && j.machines[0].machine_id) || null;
+    STATE.machines = Array.isArray(j.machines) ? j.machines : [];
+    if (!STATE.machine) {
+      let saved = null; try { saved = localStorage.getItem("hks_selected_machine"); } catch {}
+      STATE.machine = (saved && STATE.machines.some((x) => x.machine_id === saved) ? saved : null)
+        || j.default_machine || (STATE.machines[0] && STATE.machines[0].machine_id) || null;
+    }
+    if (STATE.machine && !STATE.machines.some((x) => x.machine_id === STATE.machine))
+      STATE.machine = j.default_machine || (STATE.machines[0] && STATE.machines[0].machine_id) || null;
+    if (STATE.machine) { try { localStorage.setItem("hks_selected_machine", STATE.machine); } catch {} }
+    const picker = $("#tMachine");
+    if (picker) {
+      const signature = STATE.machines.map((x) => `${x.machine_id}\u0000${x.name || ""}`).join("\u0001");
+      if (picker.dataset.signature !== signature) {
+        picker.replaceChildren(...(STATE.machines.length
+          ? STATE.machines.map((x) => el("option", { value: x.machine_id }, x.name || x.machine_id.slice(0, 12)))
+          : [el("option", { value: "" }, "No managed device")]));
+        picker.dataset.signature = signature;
+      }
+      picker.value = STATE.machine || "";
+    }
     const m = STATE.machines.find((x) => x.machine_id === STATE.machine);
     $("#dSvc").className = "dot" + (m && m.live_svc ? " ok" : "");
     $("#dSes").className = "dot" + (m && m.live_session ? " ok" : "");
     $("#tSvc").textContent = "service " + (m && m.live_svc ? "online" : "offline");
     $("#tSes").textContent = "desktop " + (m && m.live_session ? "online" : "offline");
-    $("#tMachine").textContent = m ? (m.name || m.machine_id.slice(0, 8)) : "no machine";
     STATE.live = { svc: !!(m && m.live_svc), session: !!(m && m.live_session) };
     STATE.bootTs = m && m.boot_ts;
     paintStrip();
     paintAgentFix();
   } catch (e) {}
+}
+function selectMachine(machineId) {
+  if (!machineId || machineId === STATE.machine || !STATE.machines.some((m) => m.machine_id === machineId)) return;
+  STATE.machine = machineId;
+  try { localStorage.setItem("hks_selected_machine", machineId); } catch {}
+  const selected = STATE.machines.find((m) => m.machine_id === machineId);
+  STATE.live = { svc: !!selected?.live_svc, session: !!selected?.live_session };
+  STATE.bootTs = selected?.boot_ts || null;
+  $("#dSvc").className = "dot" + (STATE.live.svc ? " ok" : "");
+  $("#dSes").className = "dot" + (STATE.live.session ? " ok" : "");
+  $("#tSvc").textContent = "service " + (STATE.live.svc ? "online" : "offline");
+  $("#tSes").textContent = "desktop " + (STATE.live.session ? "online" : "offline");
+  paintStrip();
+  paintAgentFix();
+  const picker = $("#tMachine"); if (picker) picker.value = machineId;
+  Object.keys(viewCache).forEach((id) => { try { viewCache[id].remove(); } catch {} delete viewCache[id]; });
+  STATE.screenOn = STATE.camOn = STATE.micListen = STATE.talkOn = false;
+  refreshPills();
+  connectWs();
+  const current = sessionStorage.getItem("hks_last_section") || "home";
+  showSection(current);
+  toast("Managing " + (STATE.machines.find((m) => m.machine_id === machineId)?.name || machineId));
 }
 function drawB64(canvas, b64, sizeKey) {
   if (!canvas || !b64) return;
@@ -1834,7 +1940,7 @@ function renderHome(v) {
     } },
     el("span", { class: "cs-app-ic", style: "background:" + bg }, icon), el("span", null, name));
   const addons = el("div", { class: "cs-apps" },
-    addonTile("🌐", "linear-gradient(135deg,#7c3aed,#a78bfa)", "MeshCentral", "4430"),
+    addonTile("🌐", "linear-gradient(135deg,#7c3aed,#a78bfa)", "MeshCentral", "8490"),
     addonTile("🧩", "linear-gradient(135deg,#0891b2,#22d3ee)", "code-server", "8482"),
     addonTile("🐊", "linear-gradient(135deg,#16a34a,#4ade80)", "filegator", "8484"),
     addonTile("📟", "linear-gradient(135deg,#334155,#64748b)", "ttyd", "7681"),
@@ -2169,6 +2275,7 @@ const SECTIONS = [
   // MONITOR - glanceable awareness
   { id: "home",   ic: "🏡", name: "Home",             render: renderHome, group: "MONITOR" },
   { id: "dash",   ic: "🏠", name: "Dashboard",        render: renderDash, group: "MONITOR" },
+  { id: "devices",ic: "🖥️", name: "Devices",          render: renderDevices, group: "MONITOR" },
   { id: "system", ic: "💻", name: "System",           render: renderSystem, group: "MONITOR" },
   { id: "security",ic:"🛡️", name: "Security",         render: renderSecurity, group: "MONITOR" },
   { id: "reports",ic: "🧾", name: "Reports",          render: renderReports, group: "MONITOR" },
@@ -2252,6 +2359,7 @@ function showSection(id) {
     if (!v.isConnected) $("#views").append(v);
     v.classList.add("on");
   }
+  if (id === "devices" && typeof v.refreshDevices === "function") v.refreshDevices();
   /* 7.2.52 fix: some renders draw their own header - drop the auto one if so */
   const _h2s = v.querySelectorAll("h2.vt");
   if (_h2s.length > 1) _h2s[0].remove();
@@ -2401,6 +2509,8 @@ let _chromeDone = false;
 function initChrome() {
   if (_chromeDone) return;
   _chromeDone = true;
+  const machinePicker = $("#tMachine");
+  if (machinePicker) machinePicker.addEventListener("change", () => selectMachine(machinePicker.value));
   const bell = $("#btnBell");
   const profile = $("#tUserWrap"), profileMenu = $("#profileMenu");
   if (profile && profileMenu) {
@@ -4742,7 +4852,7 @@ function renderSettings(v) {
         info.append(
           el("div", { class: "kvrow" }, el("span", null, "HKS build"), el("b", null, "v" + v.version)),
           el("div", { class: "kvrow" }, el("span", null, "Main port"), el("b", null, String(v.main))),
-          el("div", { class: "kvrow" }, el("span", null, "UI version"), el("b", null, "v97")),
+          el("div", { class: "kvrow" }, el("span", null, "UI version"), el("b", null, "v101")),
           el("div", { class: "kvrow" }, el("span", null, "User"), el("b", null, (STATE.user || {}).username || "-")));
       } catch (e) { info.innerHTML = ""; info.className = "muted"; info.textContent = e.message; }
       try {

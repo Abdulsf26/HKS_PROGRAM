@@ -49,8 +49,8 @@ def _container_info(name):
 
 # name, LAN port, what it is, installer bat, how it is installed
 ADDONS = [
-    {"name": "MeshCentral", "port": 8490,
-     "what": "full remote-management server (its own web desktop)",
+    {"name": "MeshCentral", "port": 8490, "scheme": "https",
+     "what": "remote-management server (HTTPS; first run may show its self-signed certificate warning)",
      "installer": "HKS_ADDONS\\ADDON_MESHCENTRAL.bat", "how": "npm (Node.js)"},
     {"name": "ttyd", "port": 7681,
      "what": "terminal in the browser (shared-machine shell)",

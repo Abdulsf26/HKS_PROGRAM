@@ -103,4 +103,16 @@ assert by["windows_exporter"]["url"].endswith(":9182/metrics")
 assert by["Jellyfin"]["installer_available"] is True
 assert by["Jellyfin"]["installed"] is None  # script presence is not product installation
 
+# MeshCentral serves its main UI over HTTPS; its addon metadata, installer,
+# and existing configuration must agree and installation must be idempotent.
+mesh = next(a for a in REG if a["name"] == "MeshCentral")
+assert mesh["port"] == 8490 and mesh["scheme"] == "https"
+mesh_bat = open(os.path.join(ADD, "ADDON_MESHCENTRAL.bat"), encoding="ascii").read()
+assert "https://localhost:8490" in mesh_bat
+assert 'if not exist meshcentral-data\\config.json' in mesh_bat
+assert "profile=private" in mesh_bat
+assert "netstat -ano -p tcp" in mesh_bat
+ui = open(os.path.join(ROOT, "HKS_AdminPanel", "server", "static", "app.js"), encoding="utf-8").read()
+assert '"MeshCentral", "8490"' in ui
+
 print("ADDONS TESTS: 37 registered / 25 new bats verified / menu + autostart + status OK")
