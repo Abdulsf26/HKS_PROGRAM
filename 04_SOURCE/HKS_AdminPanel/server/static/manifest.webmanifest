@@ -1,0 +1,9 @@
+{
+  "name": "HKS Remote Control Panel",
+  "short_name": "HKS",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b0e14",
+  "theme_color": "#0b0e14",
+  "description": "HKS - remote control panel for your own laptop"
+}

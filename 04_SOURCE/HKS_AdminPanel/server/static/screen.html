@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>HKS Remote Screen — fullscreen mirror</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>
+:root { --bg:#0a0d13; --card:#141926; --border:#232b3d; --text:#e8ebf2; --muted:#8b93a8; --primary:#4f8cff; --danger:#ef5466; }
+* { box-sizing: border-box; }
+html,body { margin:0; height:100%; background:var(--bg); color:var(--text); font:13.5px/1.5 "Segoe UI",system-ui,sans-serif; overflow:hidden; }
+#bar { display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--card); border-bottom:1px solid var(--border); }
+#bar .st { margin-left:auto; color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums; }
+.btn { background:var(--primary); color:#fff; border:none; border-radius:8px; padding:8px 13px; font-size:12.5px; font-weight:650; cursor:pointer; min-height:38px; }
+.btn.ghost { background:#1a2030; border:1px solid var(--border); }
+.btn.danger { background:var(--danger); }
+#stage { position:absolute; inset:49px 0 0 0; display:grid; place-items:center; background:#05070b; }
+#cv { max-width:100%; max-height:100%; background:#000; border:1px solid var(--border); border-radius:6px; touch-action:none; outline:none; }
+#msg { position:absolute; inset:0; display:grid; place-items:center; color:var(--muted); text-align:center; padding:20px; }
+#inputOn { width:auto; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <b>HKS Remote Screen</b>
+  <button class="btn ghost" id="bFull">⛶ Fullscreen</button>
+  <button class="btn ghost" id="bShot">📸 Save shot</button>
+  <select id="mon" class="btn ghost" style="width:auto">
+    <option value="0">Main monitor</option><option value="1">Monitor 2</option>
+  </select>
+  <label style="display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12.5px">
+    <input type="checkbox" id="inputOn" checked> Mouse+Keys ON
+  </label>
+  <span class="st" id="st">connecting…</span>
+  <button class="btn danger" id="bClose">✕ Disconnect</button>
+</div>
+<div id="stage">
+  <canvas id="cv" tabindex="0"></canvas>
+  <div id="msg">Connecting to your laptop's live channel…<br>If this hangs, open it from the Dashboard (backup mode works there).</div>
+</div>
+<script>
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+const st = document.getElementById("st");
+const qs = new URLSearchParams(location.search);
+const MACHINE = qs.get("m") || "";
+const proto = location.protocol === "https:" ? "wss://" : "ws://";
+let ws = null, wsDead = false, scr = { w: 1280, h: 720 }, tries = 0;
+let inputOn = () => document.getElementById("inputOn").checked;
+let restTimer = null, seq = 0;
+/* sandboxed-preview guard: document.cookie THROWS in an opaque-origin iframe */
+const TOKEN = (() => { try { return qs.get("token") || ""; } catch (e) { return ""; } })();
+const csrf = (() => { try { return (document.cookie.match(/(?:^|;\s*)hks_session=[^;]*/) || [""])[0]; } catch (e) { return ""; } })();
+
+/* EngineMonitor (AnywhereInput port): poll the real input engine state and
+   show it next to LIVE - healthy/degraded/offline + error count. */
+setInterval(async () => {
+  if (wsDead || !inputOn()) return;
+  try {
+    const r = await api("input.status", {});
+    const d = r.result ? (r.result.data || {}) : (r.data || r);
+    if (!d.engine) return;
+    const base = st.textContent.replace(/ \u00b7 ENG.*$/, "");
+    st.textContent = base + " \u00b7 ENG " + d.engine +
+      (d.errors ? " (" + d.errors + " err)" : "");
+    st.style.color = d.engine === "healthy" ? "" : (d.engine === "degraded" ? "#fbbf24" : "#f87171");
+  } catch (e) {}
+}, 4000);
+
+function api(action, params) {
+  const h = { "Content-Type": "application/json", "X-HKS-CSRF": (window.__hksCsrf || "") };
+  if (TOKEN) h["Authorization"] = "Bearer " + TOKEN;
+  return fetch("/api/cmd", { method: "POST", credentials: "same-origin",
+    headers: h,
+    body: JSON.stringify({ machine: MACHINE, action, params }) })
+    .then(r => r.json());
+}
+/* resolve our CSRF from /api/me so REST fallback input works too
+   (token fallback for cookie-blocked sandboxed previews) */
+(() => {
+  const h = TOKEN ? { "Authorization": "Bearer " + TOKEN } : {};
+  fetch("/api/me", { credentials: "same-origin", headers: h }).then(r => r.json()).then(j => {
+    window.__hksCsrf = (j.user && j.user.csrf) || "";
+    if (!j.user) { document.getElementById("msg").innerHTML = "Not logged in — <a href='/'>sign in</a>, then reopen this tab."; }
+  }).catch(() => {});
+})();
+
+function draw(buf) {
+  const blob = new Blob([buf], { type: "image/jpeg" });
+  const img = new Image();
+  img.onload = () => {
+    if (cv.width !== img.naturalWidth) { cv.width = img.naturalWidth; cv.height = img.naturalHeight; }
+    ctx.drawImage(img, 0, 0);
+    scr = { w: img.naturalWidth, h: img.naturalHeight };
+    document.getElementById("msg").style.display = "none";
+  };
+  img.src = URL.createObjectURL(blob);
+}
+function restLoop() {                       // backup: pull frames over REST
+  if (!wsDead || restTimer) return;
+  const tick = () => {
+    restTimer = null;
+    if (!wsDead) return;
+    api("screen.snapshot", { monitor: +mon.value, max_width: 1100 }).then(j => {
+      st.textContent = "backup mode (REST) — slower";
+      const b = j.result && j.result.data && j.result.data.b64;
+      if (b) fetch("data:image/jpeg;base64," + b).then(r => r.blob())
+        .then(bl => new Response(bl).arrayBuffer()).then(draw);
+    }).catch(() => {});
+    restTimer = setTimeout(tick, 900);
+  };
+  tick();
+}
+function connect() {
+  st.textContent = "live channel connecting…";
+  ws = new WebSocket(proto + location.host + "/ws/dash");
+  ws.binaryType = "arraybuffer";
+  ws.onopen = () => { ws.send(JSON.stringify({ machine: MACHINE, token: TOKEN || undefined })); st.textContent = "LIVE"; tries = 0; };
+  ws.onmessage = (ev) => {
+    if (ev.data instanceof ArrayBuffer) {
+      const u = new Uint8Array(ev.data);
+      if (u[0] === 1) { draw(ev.data.slice(1)); st.textContent = "LIVE"; }
+      return;
+    }
+    try { const m = JSON.parse(ev.data); if (m.type === "hello_dash") st.textContent = "LIVE"; } catch {}
+  };
+  ws.onclose = (ev) => {
+    wsDead = ev.code === 4401;
+    if (wsDead) { st.textContent = "live channel auth blocked — using backup"; restLoop(); return; }
+    st.textContent = "reconnecting…";
+    setTimeout(connect, Math.min(12000, 2000 * ++tries));
+  };
+  ws.onerror = () => { try { ws.close(); } catch {} };
+}
+connect();
+window.addEventListener("beforeunload", () => { wsDead = true; try { ws && ws.close(); } catch {} });
+
+/* ---- coordinate mapping (VNC-style): browser px → remote px, with
+   letterboxing handled by mapping through the ACTUAL canvas rect,
+   then clamped into the remote screen bounds ---- */
+/* AnywhereInput protocol: send NORMALIZED 0..1 coords; the agent engine
+   multiplies by the real screen size (physical px) at the last moment. */
+function toNat(cx, cy) {
+  const r = cv.getBoundingClientRect();
+  let x = (cx - r.left) / r.width;
+  let y = (cy - r.top) / r.height;
+  x = Math.max(0, Math.min(0.99999, x));
+  y = Math.max(0, Math.min(0.99999, y));
+  return { x: +x.toFixed(5), y: +y.toFixed(5) };
+}
+function send(ev) {
+  if (!inputOn()) return;
+  if (ws && ws.readyState === 1) { ws.send(JSON.stringify({ type: "input", ev })); return; }
+  api("input.apply", ev).catch(() => {});
+}
+/* mouse */
+let lastMove = 0;
+cv.addEventListener("mousemove", e => {
+  const now = Date.now(); if (now - lastMove < 33) return; lastMove = now;
+  send({ t: "mm", ...toNat(e.clientX, e.clientY) });
+});
+cv.addEventListener("mousedown", e => { e.preventDefault(); cv.focus(); send({ t: "md", ...toNat(e.clientX, e.clientY), btn: e.button }); });
+cv.addEventListener("mouseup", e => send({ t: "mu", ...toNat(e.clientX, e.clientY), btn: e.button }));
+cv.addEventListener("wheel", e => { e.preventDefault(); send({ t: "mw", dx: e.deltaX, dy: e.deltaY }); }, { passive: false });
+cv.addEventListener("contextmenu", e => e.preventDefault());
+cv.addEventListener("keydown", e => { e.preventDefault(); send({ t: "kd", key: e.key, code: e.code, ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey }); });
+cv.addEventListener("keyup", e => { e.preventDefault(); send({ t: "ku", key: e.key, code: e.code }); });
+/* touch — VNC client behavior: tap = click, drag = press+move, long-press = right click */
+let tS = null, moved = false, tT = null, touchDown = false;
+cv.addEventListener("touchstart", e => {
+  e.preventDefault(); const t = e.touches[0]; tS = toNat(t.clientX, t.clientY); moved = false;
+  tT = setTimeout(() => { if (tS && !moved) send({ t: "md", ...tS, btn: 2 }); }, 600);
+}, { passive: false });
+cv.addEventListener("touchmove", e => {
+  e.preventDefault(); if (!tS) return;
+  const p = toNat(e.touches[0].clientX, e.touches[0].clientY);
+  if (Math.abs(p.x - tS.x) + Math.abs(p.y - tS.y) > 8) {
+    moved = true; clearTimeout(tT);
+    if (!touchDown) { send({ t: "md", ...tS, btn: 0 }); touchDown = true; }
+    send({ t: "mm", ...p });
+  }
+}, { passive: false });
+cv.addEventListener("touchend", e => {
+  clearTimeout(tT); if (!tS) return; e.preventDefault();
+  if (touchDown) { send({ t: "mu", ...toNat(e.changedTouches[0].clientX, e.changedTouches[0].clientY), btn: 0 }); touchDown = false; }
+  else if (!moved) { send({ t: "md", ...tS, btn: 0 }); send({ t: "mu", ...tS, btn: 0 }); try { navigator.vibrate && navigator.vibrate(10); } catch (er) {} }
+  tS = null;
+}, { passive: false });
+
+/* toolbar */
+document.getElementById("bFull").onclick = () => {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen().catch(() => {});
+};
+document.getElementById("bClose").onclick = () => { wsDead = true; try { ws && ws.close(); } catch {} window.close(); };
+document.getElementById("bShot").onclick = () => {
+  if (!cv.width) return;
+  const a = document.createElement("a");
+  a.href = cv.toDataURL("image/png");
+  a.download = "HKS_mirror_" + new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19) + ".png";
+  a.click();
+};
+mon.onchange = () => { api("screen.control", { on: true, monitor: +mon.value, fps: 8, quality: 55, max_width: 1400 }).catch(() => {}); };
+/* round 65 (audit7 #31): the fixed 600 ms timer raced the /api/me round trip
+   and sent an EMPTY CSRF header (403, black canvas on slow links). Wait for
+   the bootstrap, with a 4 s escape hatch if /api/me never answers. */
+(function firstStart() {
+  if (window.__hksCsrf || (firstStart.w = (firstStart.w || 0) + 150) > 4000) {
+    api("screen.control", { on: true, monitor: 0, fps: 8, quality: 55, max_width: 1400 }).catch(() => {});
+    return;
+  }
+  setTimeout(firstStart, 150);
+})();
+</script>
+</body>
+</html>

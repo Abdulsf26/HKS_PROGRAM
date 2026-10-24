@@ -1,0 +1,16 @@
+# HKS Client (Windows agent) dependencies
+websockets>=13
+psutil>=5.9
+pillow>=10
+mss>=9
+pynput>=1.7
+opencv-python>=4.8
+numpy
+sounddevice>=0.4.6
+pywin32
+pycaw
+comtypes
+winotify
+pyttsx3
+pymysql
+pyautogui>=0.9.54  # input engine (AnywhereInput MouseWorker port)

@@ -1,0 +1,35 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>HKS Admin Panel — First-time Setup</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+ body{background:#0b0f14;color:#d7e1ea;font-family:Segoe UI,system-ui,sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0}
+ .card{background:#111823;border:1px solid #1f2c3c;border-radius:14px;padding:28px;width:380px;box-shadow:0 10px 40px #0008}
+ h1{font-size:20px;margin:0 0 4px;color:#39d98a} p.sub{color:#7d8ea0;font-size:13px;margin:0 0 18px}
+ label{display:block;font-size:12px;color:#8fa3b5;margin:12px 0 4px}
+ input{width:100%;box-sizing:border-box;background:#0b1220;border:1px solid #24344a;border-radius:8px;color:#e6eef6;padding:10px;font-size:14px}
+ button{width:100%;margin-top:18px;background:#39d98a;border:0;border-radius:8px;padding:11px;font-weight:700;color:#06281a;font-size:15px;cursor:pointer}
+ button:hover{filter:brightness(1.1)} .err{color:#ff7b72;font-size:13px;margin-top:10px;min-height:16px}
+ ul{font-size:12px;color:#7d8ea0;padding-left:16px}
+</style></head><body>
+<div class="card">
+ <h1>⚡ HKS Admin Panel — Setup</h1>
+ <p class="sub">First run: create the administrator account for this panel.</p>
+ <form id="f">
+  <label>Admin username</label><input id="u" autocomplete="username" required minlength="3">
+  <label>Admin password (min 8 chars)</label><input id="p" type="password" autocomplete="new-password" required minlength="8">
+  <label>Repeat password</label><input id="p2" type="password" required minlength="8">
+  <button>Create admin &amp; open panel</button><div class="err" id="e"></div>
+ </form>
+ <ul><li>Use a long, unique password — this panel has OS-level control of your laptop.</li>
+ <li>Agents authenticate with the token in <code>.env</code> (HKS_AGENT_TOKEN).</li></ul>
+</div>
+<script>
+document.getElementById('f').onsubmit = async (ev)=>{ev.preventDefault();
+ const e=document.getElementById('e');
+ if(document.getElementById('p').value!==document.getElementById('p2').value){e.textContent='Passwords do not match';return;}
+ const r=await fetch('/setup',{method:'POST',headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({username:u.value,password:p.value})});
+ const j=await r.json();
+ if(j.ok){location.href='/';} else {e.textContent=j.error||'failed';}
+};
+</script></body></html>

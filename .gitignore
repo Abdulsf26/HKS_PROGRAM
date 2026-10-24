@@ -1,0 +1,35 @@
+# Build and test outputs
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+node_modules/
+.env
+!.env.example
+*.pem
+*.key
+*.db
+*.sqlite
+*.sqlite3
+*.log
+04_SOURCE/data/
+04_SOURCE/data_panel/
+04_SOURCE/HKS_AdminPanel/data/
+04_SOURCE/HKS_AdminPanel/certs/
+04_SOURCE/HKS_AdminPanel/server/static/HKS_PROGRAM.zip
+HKS_PROGRAM.zip
+HKS_PROGRAM_SETUP.exe
+01_DELIVERY_PARTS/
+# GitHub export excludes local and conversation-derived files.
+04_SOURCE/HKS_NEXT_PHASE_PLAN.md
+04_SOURCE/HKS_AdminPanel/HKS_BUILD_SPECIFICATION.md
+04_SOURCE/HKS_AdminPanel/LINKED_PROJECTS.md
+04_SOURCE/HKS_AdminPanel/RESEARCH_NOTES.md
+04_SOURCE/HKS_AdminPanel/server/static/CHANGELOG.md
+02_DOCS/HKS_BUILD_SPECIFICATION.md
+AGENTS.md
+**/AGENTS.md
+
+
+**/_*_tmp/

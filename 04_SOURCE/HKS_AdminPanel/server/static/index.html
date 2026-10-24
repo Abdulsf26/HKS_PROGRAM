@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>HKS — Remote Control Panel</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="manifest" href="/static/manifest.webmanifest">
+<meta name="theme-color" content="#0b0e14">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="/static/style.css?v=99">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%232563eb'/><text x='16' y='22' font-size='16' text-anchor='middle' fill='%23fff' font-weight='bold'>H</text></svg>">
+<script>
+/* theme before first paint. round 62 (audit5 #1): ONLY the theme line stays
+   in <head> - the login wiring touched #lu/#lgEye/#loginDate before <body>
+   existed, threw, and a silent catch hid it (eye/remember/forgot were dead
+   in every browser). It moved to the end of <body>, without a silent catch. */
+try{
+  var hksRoot=document.documentElement;
+  var hksTheme=localStorage.getItem("hks_theme");
+  if(hksTheme==="light"||hksTheme==="dark")hksRoot.dataset.theme=hksTheme;
+  var hksAccent=localStorage.getItem("hks_accent");
+  if(hksAccent==="blue"||hksAccent==="green"||hksAccent==="purple")hksRoot.dataset.accent=hksAccent;
+  var hksFont=localStorage.getItem("hks_font");
+  if(hksFont==="s"||hksFont==="l")hksRoot.dataset.font=hksFont;
+}catch(e){}
+</script>
+</head>
+<body>
+
+<!-- ================= LOGIN (bedimcode animated-login-form port, MIT) ================= -->
+<div id="login">
+  <img class="lg-bg" alt="" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 810'%3E%3Cdefs%3E%3ClinearGradient id='sky' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%230e1626'/%3E%3Cstop offset='.55' stop-color='%230a0f1c'/%3E%3Cstop offset='1' stop-color='%23060912'/%3E%3C/linearGradient%3E%3CradialGradient id='glow' cx='.72' cy='.28' r='.5'%3E%3Cstop offset='0' stop-color='%234f8cff' stop-opacity='.32'/%3E%3Cstop offset='1' stop-color='%234f8cff' stop-opacity='0'/%3E%3C/radialGradient%3E%3C/defs%3E%3Crect width='1440' height='810' fill='url(%23sky)'/%3E%3Crect width='1440' height='810' fill='url(%23glow)'/%3E%3Cpath fill='%23101828' d='M0 810L0 640L180 560L340 650L520 500L720 620L900 540L1080 610L1260 550L1440 600L1440 810Z'/%3E%3Cpath fill='%230d1524' d='M0 810L0 720L240 660L480 730L720 640L960 720L1200 660L1440 710L1440 810Z'/%3E%3Cg fill='%23ffffff' opacity='.5'%3E%3Ccircle cx='1180' cy='140' r='2'/%3E%3Ccircle cx='1260' cy='90' r='1.5'/%3E%3Ccircle cx='340' cy='120' r='1.5'/%3E%3Ccircle cx='240' cy='200' r='1'/%3E%3Ccircle cx='1050' cy='60' r='1'/%3E%3C/g%3E%3C/svg%3E">
+  <form id="loginForm" class="lgf" autocomplete="on">
+    <div class="lgf-brand"><div class="logo">H</div><div class="lgf-brand-copy"><b>HKS</b><small>Remote Control Panel</small></div><button type="button" class="login-profile-toggle" id="loginProfileToggle" aria-expanded="false" aria-controls="loginProfilePanel"><span aria-hidden="true">◉</span> Profile</button></div>
+    <div class="login-profile-panel" id="loginProfilePanel" hidden role="region" aria-label="Login profile"><b>Saved profile</b><p id="loginProfileHint">Remember me saves only your username in this browser.</p><button type="button" id="useSavedProfile" hidden></button></div>
+    <h1 class="lgf-title">Welcome back</h1>
+    <p class="login-subtitle">Sign in to securely access your connected PC.</p>
+
+    <div class="lgf-content">
+      <div class="lgf-box">
+        <svg class="lgf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/></svg>
+        <div class="lgf-boxin">
+          <input id="lu" autocomplete="username" required placeholder=" ">
+          <label for="lu" class="lgf-label">Username</label>
+        </div>
+      </div>
+      <div class="lgf-box">
+        <svg class="lgf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+        <div class="lgf-boxin">
+          <input id="lp" type="password" autocomplete="current-password" required placeholder=" ">
+          <label for="lp" class="lgf-label">Password</label>
+          <svg class="lgf-eye" id="lgEye" role="button" tabindex="0" aria-label="Show password" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path class="eye-open" d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z"/><circle class="eye-open" cx="12" cy="12" r="2.6"/><g class="eye-closed" style="display:none"><path d="M4 12h16"/><path d="M7 9.5 5.2 7.8M17 9.5l1.8-1.7M12 8.6V6.2M8.5 14.2l-1.3 1.9M15.5 14.2l1.3 1.9"/></g></svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="lgf-check">
+      <label class="lgf-remember"><input type="checkbox" id="lgRemember"> Remember me</label>
+      <a href="#" class="lgf-forgot" id="lgForgot">Forgot password?</a>
+    </div>
+
+    <!-- round 67 (Ammar UI doc PART 3): was five spans of dense prose -
+         now headline + one lead + a scannable checklist. Same IDs, so the
+         pills updater keeps working unchanged. -->
+    <div id="offlineBanner" class="hks-offline" style="display:none">
+      <div class="hks-offline-head"><span class="hks-offline-ico">⚠️</span><b>PANEL OFFLINE</b></div>
+      <p class="hks-offline-lead">This page loaded, but the panel is not answering (yet).</p>
+      <ul class="hks-offline-checklist">
+        <li>Opened at: <b id="offOrigin">…</b> — if that is NOT your laptop's address, you are on a demo/cached page. Use the address printed by <b>CHECK_STATUS.bat</b> on the laptop.</li>
+        <li>Same Wi-Fi? The laptop's LAN address with this port (<b id="offPort">…</b>) is the one to use. A certificate warning is NORMAL on https — tap Proceed / Advanced.</li>
+        <li id="offDemo" style="display:none"><b>DEMO link</b> — its server sleeps between sessions. That says NOTHING about your laptop or the HKS code. Ask for a fresh demo link.</li>
+        <li>Waiting helps only if the panel is still starting — it retries automatically.</li>
+      </ul>
+    </div>
+    <!-- round 68 (F24): hidden until the server answers totp_required -->
+    <div id="totpRow" style="display:none">
+      <div class="lgf-box">
+        <svg class="lgf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2 4 6v6c0 5 3.4 8.6 8 10 4.6-1.4 8-5 8-10V6l-8-4z"/><path d="M12 11v3"/><circle cx="12" cy="8.4" r="0.6"/></svg>
+        <div class="lgf-boxin">
+          <input id="ltot" inputmode="numeric" autocomplete="one-time-code" placeholder=" " maxlength="6">
+          <label for="ltot" class="lgf-label">6-digit code</label>
+        </div>
+      </div>
+    </div>
+    <button class="lgf-btn" type="submit">Sign in</button>
+    <div class="err" id="lerr"></div>
+    <div class="login-date" id="loginDate"></div>
+    <div class="lgf-foot">Secure • Reliable • Powerful</div>
+  </form>
+</div>
+
+<!-- ================= APP ================= -->
+<div id="app">
+  <nav id="side">
+    <div class="brand"><div class="logo">H</div><div><b>HKS</b><small class="hide-m">Remote Control Panel<br>Complete Control. Total Monitoring. Anywhere.</small></div></div>
+    <div id="nav"></div>
+    <div id="sideStatus" class="side-status">
+      <div class="ss-row"><span class="dot" id="ssDot"></span><b id="ssName">—</b></div>
+      <div class="ss-row muted" id="ssOs">connecting…</div>
+      <div class="ss-row muted" id="ssUp"></div>
+    </div>
+  </nav>
+  <header id="top">
+    <button class="btn ghost icon" id="hamb" title="Menu">☰</button>
+    <span class="brand-m"><b>HKS</b></span>
+    <input id="gsearch" placeholder="Search anything…  (try: files, camera, logs)" autocomplete="off">
+    <button class="btn ghost icon" id="btnBell" title="Errors & alerts">🔔<span class="badge" id="errBadge" style="display:none">0</span></button>
+    <span class="pill hide-m"><span class="dot" id="dSvc"></span><span id="tSvc">service</span></span>
+    <span class="pill hide-m"><span class="dot" id="dSes"></span><span id="tSes">desktop</span></span>
+    <span class="pill" id="tMachine">no machine</span>
+    <span class="pill hide-m" id="wsPill" title="browser ⇄ laptop live channel">● live…</span>
+    <span style="flex:1"></span>
+    <span class="pill hide-m" id="tClock">--:--</span>
+    <button class="userchip" id="tUserWrap" type="button" aria-label="Profile" aria-haspopup="menu" aria-expanded="false" aria-controls="profileMenu"><span class="avatar" id="tUserAv" aria-hidden="true">?</span><span class="profile-caption">Profile</span><span id="tUser" hidden>—</span><span class="profile-caret" aria-hidden="true">⌄</span></button>
+    <div id="profileMenu" class="profile-menu" role="menu" aria-label="Profile menu" hidden><div class="profile-menu-heading">Signed in as <b id="profileMenuUser">—</b></div><button id="btnLogout" class="profile-menu-logout" type="button" role="menuitem">↗&nbsp; Logout</button></div>
+    <button class="btn ghost icon" id="btnLockPanel" title="Lock dashboard" aria-label="Lock dashboard">🔒</button>
+  </header>
+  <!-- 2026 UI report Part 4.4: STATUS STRIP - glanceable awareness, fixed, updates 1-5s -->
+  <div id="statusStrip" class="hks-status-strip" role="status" aria-label="live status">
+    <span class="hks-ss"><i id="ssServer" class="hks-dot ok hks-pulse"></i>SERVER</span>
+    <span class="hks-ss"><i id="ssSvc" class="hks-dot"></i>SERVICE</span>
+    <span class="hks-ss"><i id="ssSes" class="hks-dot"></i>DESKTOP</span>
+    <span class="hks-ss">⇄ <b id="ssLat">—</b></span>
+    <span style="flex:1"></span>
+    <span class="hks-ss hks-ss-conn" id="ssConn">connecting…</span>
+  </div>
+  <main id="main"><div id="views"></div></main>
+  <footer id="foot">
+    <span><b>HKS Remote Control Panel v2.0</b></span>
+    <span class="hide-m">|</span>
+    <span class="hide-m">Designed for Power, Control and Security</span>
+    <span style="flex:1"></span>
+    <span class="pill ok"><span class="dot on"></span><span id="footConn">Connected</span></span>
+    <span class="hide-m" id="footAddr"></span>
+  </footer>
+
+</div>
+
+<!-- lock overlay -->
+<div id="lockscreen">
+  <div class="login-card">
+    <div class="brand-lg"><div class="logo">🔒</div><div><b>Panel locked</b></div></div>
+    <p class="sub">Enter your password to unlock the dashboard.</p>
+    <div class="field"><input id="lockPw" type="password" placeholder="Password"></div>
+    <button class="btn full" id="btnUnlock">Unlock</button>
+    <div class="err" id="lockErr"></div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toasts"></div>
+<script>
+/* round 62 (audit5 #1): login-page wiring at the END of <body> so the
+   elements exist. Deliberately NO silent catch - if this breaks it must
+   show in the console, not vanish like the <head> version did. */
+(function(){
+  var d=document.getElementById("loginDate");
+  if(d) d.textContent=new Date().toLocaleDateString(undefined,{weekday:"short",year:"numeric",month:"short",day:"numeric"});
+  var lu=document.getElementById("lu"), rem=localStorage.getItem("hks_remember");
+  if(rem && lu){ lu.value=rem; var r=document.getElementById("lgRemember"); if(r) r.checked=true; }
+  var profileToggle=document.getElementById("loginProfileToggle"), profilePanel=document.getElementById("loginProfilePanel"), useSaved=document.getElementById("useSavedProfile"), profileHint=document.getElementById("loginProfileHint");
+  function refreshProfile(){
+    var saved=""; try{saved=localStorage.getItem("hks_remember")||"";}catch(e){}
+    if(saved){useSaved.hidden=false;useSaved.textContent="Use saved username: "+saved;profileHint.textContent="Only the username is saved in this browser. Your password is never saved here.";}
+    else{useSaved.hidden=true;profileHint.textContent="No saved username yet. Choose Remember me after signing in to save a username in this browser.";}
+  }
+  refreshProfile();
+  if(profileToggle&&profilePanel){
+    profileToggle.addEventListener("click",function(){var open=profilePanel.hidden;profilePanel.hidden=!open;profileToggle.setAttribute("aria-expanded",String(open));if(open)refreshProfile();});
+    profileToggle.addEventListener("keydown",function(e){if(e.key==="Escape"&&!profilePanel.hidden){profilePanel.hidden=true;profileToggle.setAttribute("aria-expanded","false");profileToggle.focus();}});
+  }
+  if(useSaved)useSaved.addEventListener("click",function(){var saved="";try{saved=localStorage.getItem("hks_remember")||"";}catch(e){}if(saved&&lu){lu.value=saved;lu.dispatchEvent(new Event("input",{bubbles:true}));document.getElementById("lp").focus();}});
+  var eye=document.getElementById("lgEye");
+  function hksTogglePw(){
+    var p=document.getElementById("lp");if(!p)return;
+    var closed=eye.querySelector(".eye-closed"),open=eye.querySelectorAll(".eye-open");
+    var show=p.type==="password";p.type=show?"text":"password";
+    closed.style.display=show?"":"none";open.forEach(function(e){e.style.display=show?"none":"";});
+    eye.setAttribute("aria-label",show?"Hide password":"Show password");
+  }
+  /* round 67 (Ammar UI doc PART 1): the eye is a real control now - it is
+     tabbable, so it must also answer Enter/Space, not just the mouse. */
+  if(eye){
+    eye.addEventListener("click",hksTogglePw);
+    eye.addEventListener("keydown",function(e){ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); hksTogglePw(); } });
+  }
+  /* round 67 (Ammar UI doc PART 1): "Forgot password?" is a real flow now -
+     Option 1: RESET_PASSWORD.bat on the laptop. Option 2: a one-time
+     recovery code (printed once at install) + new password, checked by
+     /api/recover with the same rate limit as login. */
+  function hksResetModal(){
+    var bk=document.createElement("div");bk.className="modal-bk";
+    bk.innerHTML='<div class="modal" role="dialog" aria-modal="true" aria-labelledby="hksResetTitle" style="max-width:520px;text-align:left"><h3 id="hksResetTitle">Reset the admin password</h3>'+
+      '<p class="muted" style="margin-top:0;font-size:13px">Two ways - pick the one that matches what you can reach right now.</p>'+
+      '<div style="background:var(--surface);border:1px solid var(--border-soft);border-radius:10px;padding:14px;margin-bottom:12px">'+
+      '<b style="color:var(--primary)">You have the laptop</b>'+
+      '<ol style="color:var(--muted);font-size:13px;line-height:1.7;margin:6px 0 0;padding-left:20px">'+
+      '<li>On the laptop, run <b>C:\\HKS_PROGRAM\\RESET_PASSWORD.bat</b> as Administrator</li>'+
+      '<li>Write down the password it prints on screen</li>'+
+      '<li>Come back here and log in with it</li></ol></div>'+
+      '<div style="background:var(--surface);border:1px solid var(--border-soft);border-radius:10px;padding:14px">'+
+      '<b style="color:var(--primary)">You have a recovery code</b>'+
+      '<p class="muted" style="font-size:13px;margin:6px 0 8px">These were printed once at install. Each code works exactly once.</p>'+
+      '<label for="hksRecCode">Recovery code</label><input id="hksRecCode" autocomplete="one-time-code" style="width:100%;margin-bottom:8px">'+
+      '<label for="hksRecPw1">New password (at least 8 characters)</label><input id="hksRecPw1" type="password" autocomplete="new-password" minlength="8" style="width:100%;margin-bottom:8px">'+
+      '<label for="hksRecPw2">Repeat new password</label><input id="hksRecPw2" type="password" autocomplete="new-password" minlength="8" style="width:100%;margin-bottom:10px">'+
+      '<button class="btn full" id="hksRecGo">Reset password</button>'+
+      '<div id="hksRecErr" role="alert" style="color:var(--danger);font-size:12px;margin-top:8px;min-height:16px"></div></div>'+
+      '<div class="row end" style="margin-top:12px"><button class="btn ghost sm" id="hksRecClose">Close</button></div></div>';
+    document.body.appendChild(bk);
+    var previousFocus=document.activeElement;
+    var close=function(){bk.remove();if(previousFocus&&previousFocus.focus)previousFocus.focus();};
+    var dialog=bk.querySelector(".modal"), first=dialog.querySelector("input"), closeButton=bk.querySelector("#hksRecClose");
+    if(first)first.focus();
+    bk.addEventListener("keydown",function(e){
+      if(e.key==="Escape"){e.preventDefault();close();return;}
+      if(e.key!=="Tab")return;
+      var items=Array.from(dialog.querySelectorAll("button:not([disabled]),input:not([disabled]),a[href],[tabindex]:not([tabindex=\"-1\"])")).filter(function(x){return x.offsetParent!==null;});
+      if(!items.length)return;
+      if(e.shiftKey&&document.activeElement===items[0]){e.preventDefault();items[items.length-1].focus();}
+      else if(!e.shiftKey&&document.activeElement===items[items.length-1]){e.preventDefault();items[0].focus();}
+    });
+    bk.querySelector("#hksRecClose").onclick=close;
+    bk.addEventListener("click",function(e){ if(e.target===bk) close(); });
+    bk.querySelector("#hksRecGo").onclick=function(){
+      var err=bk.querySelector("#hksRecErr");err.style.color="var(--danger)";err.textContent="";
+      var code=bk.querySelector("#hksRecCode").value.trim();
+      var p1=bk.querySelector("#hksRecPw1").value,p2=bk.querySelector("#hksRecPw2").value;
+      if(!code){err.textContent="Enter your recovery code.";return;}
+      if(p1.length<8){err.textContent="Password must be at least 8 characters.";return;}
+      if(p1!==p2){err.textContent="Passwords don't match.";return;}
+      fetch("/api/recover",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",
+        body:JSON.stringify({code:code,password:p1})})
+      .then(function(r){ return r.json().catch(function(){ throw new Error("HTTP "+r.status); }); })
+      .then(function(j){
+        if(!j.ok){ err.textContent=j.error||"Reset failed."; }
+        else{ err.style.color="var(--success)"; err.textContent="Password reset. Log in with the new password now."; setTimeout(close,1800); }
+      })
+      .catch(function(e){ err.textContent="Couldn't reach the panel: "+e.message; });
+    };
+  }
+  var fg=document.getElementById("lgForgot");
+  if(fg) fg.addEventListener("click",function(ev){ ev.preventDefault(); hksResetModal(); });
+})();
+</script>
+<script src="/static/app.js?v=99"></script>
+</body>
+</html>
