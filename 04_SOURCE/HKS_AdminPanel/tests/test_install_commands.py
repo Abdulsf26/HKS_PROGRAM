@@ -31,6 +31,14 @@ os.environ.setdefault("HKS_BASE", "/tmp/hks_cmdcheck")
 import first_run  # noqa: E402
 
 
+def _install_bat():
+    base = os.path.dirname(os.path.abspath(first_run.__file__))
+    candidates = (os.path.join(base, "INSTALL_HKS.bat"),
+                  os.path.join(base, "00_START_HERE", "INSTALL_HKS.bat"),
+                  os.path.join(os.path.dirname(base), "00_START_HERE", "INSTALL_HKS.bat"))
+    return next((p for p in candidates if os.path.isfile(p)), candidates[0])
+
+
 def test_ps_single_line():
     cmd = first_run.build_register_ps(
         "HKS-Agent", r"C:\HKS_PROGRAM\run_agent.bat", r"C:\HKS_PROGRAM", "boot")
@@ -263,7 +271,7 @@ def test_anywhere_tunnel():
 
 
 def test_elevation_and_version():
-    bat = open(os.path.join(os.path.dirname(first_run.__file__), "INSTALL_HKS.bat")).read()
+    bat = open(_install_bat(), encoding="utf-8").read()
     assert "net session" in bat and "-Verb RunAs" in bat, "installer must self-elevate"
     src = open(first_run.__file__).read()
     assert "__HPORT__" in src and "/api/version" in src, \
@@ -287,7 +295,7 @@ def test_clean_upgrade_kill():
 
 def test_gui_setup_entrypoint_and_password_validation():
     src = open(first_run.__file__, encoding="utf-8").read()
-    bat = open(os.path.join(os.path.dirname(first_run.__file__), "INSTALL_HKS.bat"), encoding="utf-8").read()
+    bat = open(_install_bat(), encoding="utf-8").read()
     assert "def run_gui_setup():" in src and 'ap.add_argument("--gui"' in src
     assert 'first_run.py" --gui' in bat
     assert "Passwords do not match" in src and "Port in use" in src

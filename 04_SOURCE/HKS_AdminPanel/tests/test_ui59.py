@@ -3,7 +3,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve()
 PANEL = next(p for p in HERE.parents if (p / "server" / "static" / "index.html").is_file())
 SOURCE_ROOT = PANEL.parent
-PROJECT_ROOT = SOURCE_ROOT.parent if SOURCE_ROOT.name == "HKS_AdminPanel" and (SOURCE_ROOT.parent / "00_START_HERE").is_dir() else SOURCE_ROOT
+PROJECT_ROOT = next((p for p in HERE.parents if (p / "00_START_HERE").is_dir()), SOURCE_ROOT)
 STATIC = PANEL / "server" / "static"
 
 
@@ -42,9 +42,9 @@ def test_login_profile_and_clean_login_surface():
 
 
 def test_reset_tool_targets_live_db_and_existing_user_only():
-    paths = [SOURCE_ROOT / "RESET_PASSWORD.bat"]
-    if (PROJECT_ROOT / "00_START_HERE" / "RESET_PASSWORD.bat").is_file():
-        paths.append(PROJECT_ROOT / "00_START_HERE" / "RESET_PASSWORD.bat")
+    paths = [p for p in (SOURCE_ROOT / "RESET_PASSWORD.bat",
+                         PROJECT_ROOT / "00_START_HERE" / "RESET_PASSWORD.bat") if p.is_file()]
+    assert paths, "RESET_PASSWORD.bat must exist in the repo or package layout"
     for path in paths:
         body = path.read_text(encoding="utf-8")
         assert r"HKS_DATA_DIR']=r'%BASE%\data_panel'" in body
@@ -54,9 +54,9 @@ def test_reset_tool_targets_live_db_and_existing_user_only():
 
 
 def test_installers_stage_recovery_tool():
-    paths = [SOURCE_ROOT / "INSTALL_HKS.bat"]
-    if (PROJECT_ROOT / "00_START_HERE" / "INSTALL_HKS.bat").is_file():
-        paths.append(PROJECT_ROOT / "00_START_HERE" / "INSTALL_HKS.bat")
+    paths = [p for p in (SOURCE_ROOT / "INSTALL_HKS.bat",
+                         PROJECT_ROOT / "00_START_HERE" / "INSTALL_HKS.bat") if p.is_file()]
+    assert paths, "INSTALL_HKS.bat must exist in the repo or package layout"
     for path in paths:
         body = path.read_text(encoding="utf-8")
         assert 'if not exist "%~dp0RESET_PASSWORD.bat"' in body

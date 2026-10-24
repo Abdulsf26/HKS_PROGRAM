@@ -48,14 +48,13 @@ ROOT_FILES = [
     ("02_DOCS/README_START_HERE.txt", "README_START_HERE.txt"),
     ("02_DOCS/SETUP_GUIDE.md", "SETUP_GUIDE.md"),
     ("02_DOCS/CREDITS.md", "CREDITS.md"),
-    ("02_DOCS/HKS_NEXT_PHASE_PLAN.md", "HKS_NEXT_PHASE_PLAN.md"),
     ("04_SOURCE/README.txt", "DEVELOPER_NOTES.txt"),
     ("04_SOURCE/first_run.py", "first_run.py"),
 ]
 EXCLUDE = {"HKS_AdminPanel/server/static/HKS_PROGRAM.zip", "HKS_AdminPanel/INSTALL_HKS.bat",
            "HKS_AdminPanel/CHECK_STATUS.bat", "HKS_AdminPanel/.env",
            "HKS_AdminPanel/certs/server.pem", "HKS_AdminPanel/certs/key.pem"}
-EXPECTED_FILES = 162  # Includes the focused boot-task repair utility.
+EXPECTED_FILES = 158  # Includes the focused boot-task repair utility.
 
 
 def add_folder(z, top, arc_prefix):
@@ -305,7 +304,15 @@ def gates(n):
             and "el(null, null" not in zt.read("HKS_AdminPanel/server/static/app.js").decode()),
         ("dash preview is canvas", 'startStills("dashPrev", "#dashPrevCanvas"' in zt.read("HKS_AdminPanel/server/static/app.js").decode()),
         ("hidden checkbox wired", "FM.showHidden = hiddenCk.checked" in zt.read("HKS_AdminPanel/server/static/app.js").decode()),
-        ("control input normalized", "p2.x / s.w" in zt.read("HKS_AdminPanel/server/static/app.js").decode()),
+        ("control input uses DOM mouse-button mapping and explicit enable",
+            'click(0, "Left click")' in zt.read("HKS_AdminPanel/server/static/app.js").decode()
+            and 'click(1, "Middle click")' in zt.read("HKS_AdminPanel/server/static/app.js").decode()
+            and 'await ensureRemoteInput();' in zt.read("HKS_AdminPanel/server/static/app.js").decode()
+            and 'result.ok === false' in zt.read("HKS_AdminPanel/server/static/app.js").decode()
+            and 'Buttons act where you last touched or clicked' in zt.read("HKS_AdminPanel/server/static/app.js").decode()
+            and 'dy: -300 }); toast("Scroll up sent")' in zt.read("HKS_AdminPanel/server/static/app.js").decode()
+            and 'dy: 300 }); toast("Scroll down sent")' in zt.read("HKS_AdminPanel/server/static/app.js").decode()
+            and 'expected 0 (left), 1 (middle), or 2 (right)' in zt.read("HKS_Client/agent/session_modules/input_ctl.py").decode()),
         ("term connect label honest", 'connBtn.textContent = on ? "\u25a0 Disconnect" : "\u25b6 Connect";' in zt.read("HKS_AdminPanel/server/static/app.js").decode()),
         ("system tab match", 'let cur = "Overview";' in zt.read("HKS_AdminPanel/server/static/app.js").decode()),
         ("cores poll 10s", "setInterval(refresh, 10000)" in zt.read("HKS_AdminPanel/server/static/app.js").decode()),

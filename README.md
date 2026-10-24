@@ -29,7 +29,7 @@
 
 [**Download HKS_PROGRAM_SETUP.exe**](HKS_PROGRAM_SETUP.exe) · Windows 10/11 · GUI installer · 13.4 MB
 
-The installer contains the matching HKS 7.2.101 package. To rebuild the portable ZIP and installer from source, follow [the build tools](03_TESTS/README.txt).
+The installer contains the matching HKS 7.2.103 package. To rebuild the portable ZIP and installer from source, follow [the build tools](03_TESTS/README.txt).
 
 ## Developer quick checks
 

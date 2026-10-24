@@ -298,14 +298,21 @@ def stop_engine():
 
 
 def _to_pg_button(b):
-    return {1: "middle", 2: "right"}.get(b, "left")  # their button names
+    # Keep the browser's MouseEvent.button convention end-to-end:
+    # 0 = left, 1 = middle, 2 = right. The control-panel toolbar used to
+    # send 1/2/3 as left/right/middle, which silently turned its left click
+    # into a middle click and its middle click into a left click.
+    try:
+        return {0: "left", 1: "middle", 2: "right"}[int(b)]
+    except (KeyError, TypeError, ValueError):
+        raise ValueError("invalid mouse button; expected 0 (left), 1 (middle), or 2 (right)")
 
 
 def register(ctx):
     def apply(c, p):
         if _disabled.is_set() or not is_input_enabled():
-            return {"ok": True, "note": "input disabled (failsafe or engine offline)",
-                    "suppressed": True}
+            return {"ok": False,
+                    "error": "remote input is disabled; enable control and retry"}
         try:
             desktop = _input_desktop()
             if desktop["secure"]:

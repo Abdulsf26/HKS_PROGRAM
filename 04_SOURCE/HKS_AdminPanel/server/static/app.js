@@ -193,8 +193,25 @@ function requestReauthPassword() {
     field.focus();
   });
 }
-function sendInput(obj) {
-  return STATE.wsReady ? wsCmd("input.apply", obj) : cmd("input.apply", obj, 20);
+async function sendInput(obj) {
+  const result = STATE.wsReady ? await wsCmd("input.apply", obj) : await cmd("input.apply", obj, 20);
+  // REST unwraps the agent result in cmd(); the WS relay returns that same
+  // result as data. Do not turn an agent-side {ok:false} into a fake success.
+  if (result && result.ok === false) throw new Error(result.error || "remote input failed");
+  return result;
+}
+async function ensureRemoteInput() {
+  const status = await cmd("input.status", {}, 12);
+  if (status.available === false || status.engine === "secure desktop") {
+    throw new Error(status.desktop_error || status.last_error ||
+      "Remote input is unavailable. Unlock Windows locally and check the desktop agent.");
+  }
+  if (!status.input_active) {
+    await cmd("input.enable", { on: true }, 12);
+    STATE.inputOn = true;
+    const label = document.getElementById("inputStateLabel");
+    if (label) { label.textContent = "control ON"; label.className = "tag ok"; }
+  }
 }
 async function cmd(action, params = {}, timeout = 30) {
   const j = await api("/api/cmd", { method: "POST", body: { action, params, machine: STATE.machine, timeout }, tmo: (Math.max(timeout, 30) + 10) * 1000 });
@@ -1261,15 +1278,15 @@ function renderControl(v) {
           } catch (er) { busy(e.target, false); toast(er.message, true); }
         } }, "📸 Take screenshot"))));
   // ---- mockup control-button grid (real input.apply actions)
-  const ptr = () => (STATE.lastPtr || { x: 960, y: 540 });
+  // Pointer is stored in the same normalized coordinate space the agent
+  // consumes. It is updated by the live preview (mouse or touch).
+  const ptr = () => (STATE.lastPtr || { x: 0.5, y: 0.5 });
 
   const click = async (btn, label) => {
-    /* round 65 (audit7 #27): the engine expects NORMALIZED 0..1 (it multiplies
-       by the real screen) - raw pixels saturated to the bottom-right corner. */
-    const s = STATE.scrSize || { w: 1920, h: 1080 };
     const p2 = ptr();
-    const nx = Math.min(1, Math.max(0, p2.x / s.w)), ny = Math.min(1, Math.max(0, p2.y / s.h));
+    const nx = Math.min(0.99999, Math.max(0, p2.x)), ny = Math.min(0.99999, Math.max(0, p2.y));
     try {
+      await ensureRemoteInput();
       await sendInput({ t: "md", x: nx, y: ny, btn });
       await sendInput({ t: "mu", x: nx, y: ny, btn });
       toast(label + " at " + Math.round(nx * 100) + "% x " + Math.round(ny * 100) + "%");
@@ -1277,26 +1294,30 @@ function renderControl(v) {
   };
   v.append(panel("Control panel (acts on the laptop's cursor)",
       el("p", { class: "muted", style: "margin-top:0" },
-        "Buttons act at the last remote-pointer position (center by default). For pixel-exact control use the live preview above or fullscreen."),
+        "Buttons act where you last touched or clicked the live preview (center until you position it). Tap the preview first for precise control."),
       el("div", { class: "ctrlgrid" },
-        el("button", { class: "ctrl", onclick: () => click(1, "Left click") }, "🖱 Left Click"),
+        el("button", { class: "ctrl", onclick: () => click(0, "Left click") }, "🖱 Left Click"),
         el("button", { class: "ctrl", onclick: () => click(2, "Right click") }, "🖱 Right Click"),
         el("button", { class: "ctrl", onclick: async () => {
-          const s = STATE.scrSize || { w: 1920, h: 1080 };  /* round 65 (audit7 #27) */
           const p2 = ptr();
-          const nx = Math.min(1, Math.max(0, p2.x / s.w)), ny = Math.min(1, Math.max(0, p2.y / s.h));
-          for (let i = 0; i < 2; i++) {
-            await sendInput({ t: "md", x: nx, y: ny, btn: 1 });
-            await sendInput({ t: "mu", x: nx, y: ny, btn: 1 });
-          }
-          toast("double click");
+          const nx = Math.min(0.99999, Math.max(0, p2.x)), ny = Math.min(0.99999, Math.max(0, p2.y));
+          try {
+            await ensureRemoteInput();
+            for (let i = 0; i < 2; i++) {
+              await sendInput({ t: "md", x: nx, y: ny, btn: 0 });
+              await sendInput({ t: "mu", x: nx, y: ny, btn: 0 });
+            }
+            toast("Double click sent");
+          } catch (er) { toast(er.message, true); }
         } }, "🖱 Double Click"),
-        el("button", { class: "ctrl", onclick: () => click(3, "Middle click") }, "🖱 Middle Click"),
+        el("button", { class: "ctrl", onclick: () => click(1, "Middle click") }, "🖱 Middle Click"),
         el("button", { class: "ctrl", onclick: async () => {
-          await sendInput({ t: "mw", dx: 0, dy: 300 }); toast("scrolled up");
+          try { await ensureRemoteInput(); await sendInput({ t: "mw", dx: 0, dy: -300 }); toast("Scroll up sent"); }
+          catch (er) { toast(er.message, true); }
         } }, "⌃ Scroll up"),
         el("button", { class: "ctrl", onclick: async () => {
-          await sendInput({ t: "mw", dx: 0, dy: -300 }); toast("scrolled down");
+          try { await ensureRemoteInput(); await sendInput({ t: "mw", dx: 0, dy: 300 }); toast("Scroll down sent"); }
+          catch (er) { toast(er.message, true); }
         } }, "⌄ Scroll down"),
         el("button", { class: "ctrl", onclick: () => {
           const box = el("input", { placeholder: "text to type on the laptop…", style: "width:100%" });
@@ -2937,7 +2958,7 @@ function renderScreen(v) {
         toggle.textContent = "▶ Start mirror";
       }
     } }, "▶ Start mirror");
-  const inLbl = el("span", { class: "tag" }, "control OFF");
+  const inLbl = el("span", { id: "inputStateLabel", class: "tag" }, "control OFF");
   const updInputLabel = () => { inLbl.textContent = STATE.inputOn ? "control ON" : "control OFF"; inLbl.className = "tag " + (STATE.inputOn ? "ok" : ""); };
   const inputHealth = el("span", { class: "tag", role: "status", "aria-live": "polite" }, "checking input…");
   const refreshInputHealth = async () => {
@@ -3005,10 +3026,13 @@ function renderScreen(v) {
       el("span", { class: "muted", style: "align-self:center" }, "Ctrl+Alt+Del is a Windows secure sequence and cannot be sent remotely."))));
 
   /* AnywhereInput protocol: normalized 0..1 coords; agent multiplies by real size */
-  const toNat = (e) => { const r = canvas.getBoundingClientRect(); const x = Math.max(0, Math.min(0.99999, (e.clientX - r.left) / r.width)); const y = Math.max(0, Math.min(0.99999, (e.clientY - r.top) / r.height)); return { x: +x.toFixed(5), y: +y.toFixed(5) }; };
+  const toNat = (e) => { const r = canvas.getBoundingClientRect(); const x = Math.max(0, Math.min(0.99999, (e.clientX - r.left) / Math.max(1, r.width))); const y = Math.max(0, Math.min(0.99999, (e.clientY - r.top) / Math.max(1, r.height))); STATE.lastPtr = { x: +x.toFixed(5), y: +y.toFixed(5) }; return STATE.lastPtr; };
   const send = (ev) => {
     if (!STATE.inputOn) return;
-    if (STATE.wsReady) { wsSend({ type: "input", ev }); return; }
+    // High-rate movement is best-effort; discrete clicks/keys/wheel use the
+    // correlated command path so agent errors reach the browser.
+    if (STATE.wsReady && ev.t === "mm") { wsSend({ type: "input", ev }); return; }
+    if (ev.t !== "mm") { sendInput(ev).catch((er) => toast(er.message, true)); return; }
     // backup mode: input over the agent link (REST). Mouse moves are
     // throttled harder here (no realtime channel).
     if (ev.t === "mm") {
@@ -3016,12 +3040,13 @@ function renderScreen(v) {
       if (now - STATE.lastRestMove < 200) return;
       STATE.lastRestMove = now;
     }
-    cmd("input.apply", ev, 15).catch(() => {});
+    cmd("input.apply", ev, 15).catch((er) => toast(er.message, true));
   };
   canvas.addEventListener("mousemove", (e) => {
+    const point = toNat(e);
     if (!STATE.inputOn) return;
     const now = Date.now();
-    STATE.pendingMove = toNat(e);
+    STATE.pendingMove = point;
     if (now - STATE.lastMove > 40) { STATE.lastMove = now; send({ t: "mm", ...STATE.pendingMove }); STATE.pendingMove = null; }
   });
   canvas.addEventListener("mousedown", (e) => { e.preventDefault(); canvas.focus(); send({ t: "md", ...toNat(e), btn: e.button }); });
@@ -3032,8 +3057,9 @@ function renderScreen(v) {
   // tap = left click, drag = move with button held, long-press (600ms) = right click
   let tStart = null, tOrigin = null, tMoved = false, tTimer = null, tRightSent = false;
   canvas.addEventListener("touchstart", (e) => {
-    if (!STATE.inputOn) return; e.preventDefault(); canvas.focus();
-    const t = e.touches[0]; tStart = toNat(t); tOrigin = { x: t.clientX, y: t.clientY };
+    const t = e.touches[0]; tStart = toNat(t);
+    if (!STATE.inputOn) { tStart = null; return; }
+    e.preventDefault(); canvas.focus(); tOrigin = { x: t.clientX, y: t.clientY };
     tMoved = false; tRightSent = false;
     tTimer = setTimeout(() => { if (tStart && !tMoved) { send({ t: "md", ...tStart, btn: 2 }); tRightSent = true; } }, 600);
   }, { passive: false });

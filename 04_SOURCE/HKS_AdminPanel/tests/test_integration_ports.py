@@ -90,6 +90,10 @@ def test_input_safety_ports():
         f"fraction->px mapping wrong: {calls[:4]}"
     assert any(c[0] == "mouseDown" and c[1] == ("left",) for c in calls)
     assert any(c[0] == "mouseUp" and c[1] == ("left",) for c in calls)
+    # Browser MouseEvent.button convention is 0=left, 1=middle, 2=right.
+    for browser_btn, expected in ((0, "left"), (1, "middle"), (2, "right")):
+        assert ict._to_pg_button(browser_btn) == expected
+    assert ict._to_pg_button(0) == "left", "left click must not become middle click"
     assert any(c[0] == "scroll" and c[1] == (15,) for c in calls), "scroll sign wrong"
     assert any(c[0] == "typewrite" and c[1][0] == "hi" for c in calls)
     assert any(c[0] == "hotkey" and tuple(c[1]) == ("ctrl", "a") for c in calls)
@@ -98,7 +102,10 @@ def test_input_safety_ports():
     # engine disable releases buttons
     reg["input.enable"](FakeCtx(), {"on": False})
     assert not ict._buttons_down
-    print("  input: fractions->px + buttons + scroll sign + hotkey + status OK")
+    suppressed = reg["input.apply"](FakeCtx(), {"t": "md", "x": 0.5, "y": 0.5, "btn": 0})
+    assert suppressed["ok"] is False and "disabled" in suppressed["error"].lower(), \
+        "disabled input must never be acknowledged as a successful click"
+    print("  input: fractions->px + DOM button mapping + scroll sign + hotkey + status OK")
 
 
 def test_missing_input_backend_is_not_reported_as_success(monkeypatch):

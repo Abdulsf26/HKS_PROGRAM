@@ -169,8 +169,12 @@ def test_storage_cleanup_is_admin_csrf_gated_and_confined_to_capture_folder():
     assert _re.search(r'v=\d+', html), html[-400:]   # asset pins bumped each round
 
 def test_reset_bat_ships():
-    root = os.path.dirname(PANEL)
-    p = os.path.join(root, "RESET_PASSWORD.bat")
+    roots = [os.path.dirname(PANEL)]
+    roots.extend(p for p in __import__("pathlib").Path(PANEL).parents
+                 if (p / "00_START_HERE").is_dir())
+    candidates = [os.path.join(root, "RESET_PASSWORD.bat") for root in roots]
+    candidates.extend(os.path.join(root, "00_START_HERE", "RESET_PASSWORD.bat") for root in roots)
+    p = next((candidate for candidate in candidates if os.path.isfile(candidate)), candidates[0])
     assert os.path.isfile(p), p
     body = open(p, "rb").read().decode("utf-8", errors="replace")
     assert "RESET ADMIN PASSWORD" in body and "hash_password" in body
